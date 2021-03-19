@@ -27,7 +27,7 @@
 First, make sure this repository is recursively cloned:
 
 ```
-git clone --recurse-submodules git@gitlab.com:ProteusCore/RiscV.git
+git clone --recurse-submodules git@gitlab.com:ProteusCore/ProteusCore.git
 ```
 
 The default configuration uses Verilog arrays to simulate memories which need to be initialized with an Intel HEX file.
