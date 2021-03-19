@@ -75,7 +75,7 @@ The default configuration used above has the following memory map:
 
 - `0x80000000`: 10 MiB of RAM initialized with the given memory file
 - `0x20000000`: `mtime` register
-- `0x20001008`: `mtimecmp` register
+- `0x20000008`: `mtimecmp` register
 - `0x10000000`: Custom character devive
 
 The CPU starts executing at `0x80000000`.
