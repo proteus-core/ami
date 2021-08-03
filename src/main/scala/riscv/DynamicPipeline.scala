@@ -15,8 +15,17 @@ trait DynamicPipeline extends Pipeline {
   override val retirementStage: Stage = null
 
   override def build(): Unit = {
-    super.build()
-    issuePipeline.build()
+    issuePipeline.initBuild()
+    initBuild()
+
+    issuePipeline.setupPlugins()
+    setupPlugins()
+
+    issuePipeline.buildPlugins()
+    buildPlugins()
+
+    finishBuild()
+    issuePipeline.finishBuild()
   }
 
   override def init(): Unit = {
@@ -44,6 +53,11 @@ trait DynamicPipeline extends Pipeline {
         if (!stage.outputs.contains(valueData)) {
           stage.input(valueData)
         }
+      }
+
+      // Make sure we get the input from the issue stage for all requested outputs.
+      for (outputData <- stage.outputs.keys) {
+        stage.input(outputData)
       }
 
       for ((inputData, input) <- stage.inputs) {

@@ -27,6 +27,9 @@
 #define CHECK_TYPE(cr, type) \
     CHECK_GETTER(CGetType, cr, type);
 
+#define CHECK_ADDR(cr, addr) \
+    CHECK_GETTER(CGetAddr, cr, addr);
+
 #define CHECK_CAP_NO_OFFSET(cr, tag, base, len, perms, type) \
     CHECK_TAG(cr, tag) \
     CHECK_BOUNDS(cr, base, len) \
@@ -124,7 +127,7 @@ test_ ## testnum: \
     TEST_CASE_START(testnum) \
     code;
 
-#define ROOT c31
+#define ROOT c30
 
 #define INIT_ROOT_CAP CSpecialR ROOT, ddc
 
@@ -201,8 +204,8 @@ test_ ## testnum: \
 
 #define SEAL(cd, cs, type) \
     li t0, type; \
-    CSetOffset c30, ROOT, t0; \
-    CSeal cd, cs, c30
+    CSetOffset c29, ROOT, t0; \
+    CSeal cd, cs, c29
 
 #define SEAL_DDC(type) \
     CSpecialR c1, ddc; \

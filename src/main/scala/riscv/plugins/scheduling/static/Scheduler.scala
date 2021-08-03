@@ -9,7 +9,7 @@ class Scheduler(canStallExternally: Boolean = false)
   override def build(): Unit = {
     pipeline plug new Area {
       val stages = pipeline.stages
-      stages.head.arbitration.isValid := True
+      stages.head.arbitration.isValid := !ClockDomain.current.readResetWire
       stages.head.arbitration.isValid.allowOverride
 
       for ((stage, nextStage) <- stages.zip(stages.tail)) {
@@ -34,10 +34,6 @@ class Scheduler(canStallExternally: Boolean = false)
       for ((stage, regs) <- pipeline.pipelineRegs) {
         regs.shift := stage.arbitration.isDone
       }
-
-      stages.head.input(pipeline.data.PC) :=
-        stages(1).input(pipeline.data.NEXT_PC)
-      stages.head.input(pipeline.data.PC).allowOverride
     }
   }
 

@@ -1,94 +1,50 @@
 package riscv.plugins.scheduling.dynamic
 
 import riscv._
-
 import spinal.core._
 
-class Scheduler(val robSize: Int = 8) extends Plugin[DynamicPipeline] with IssueService {
-  class RegisterStatus extends Bundle {
-    val busy = Bool()
-    val reorder = UInt(log2Up(robSize) bits)
-  }
+class Scheduler(implicit val robCapacity: Int = 8) extends Plugin[DynamicPipeline] with IssueService {
+  class RegisterFile extends Area { // TODO: not needed?
+    val registerArray = Vec.fill(config.numRegs)(Reg(UInt(config.xlen bits)).init(0))
 
-  class Rob extends Area {
-    class Entry extends Bundle {
-      val ready = Bool()
-      val dest = UInt(log2Up(config.numRegs) bits)
-      val value = UInt(config.xlen bits)
-    }
-
-    assert(isPow2(robSize))
-
-    private val entries = {
-      val defaultEntry = (new Entry).getZero
-      Vec.fill(robSize)(Reg(new Entry).init(defaultEntry))
-    }
-
-    private val start, end = Reg(UInt(log2Up(robSize) bits)).init(0)
-    private val full = Reg(Bool()).init(False)
-
-    def isFull: Bool = full
-    def isAvailable: Bool = !isFull
-
-    def push(dest: UInt): UInt = {
-      val entry = entries(end)
-      entry.ready := False
-      entry.dest := dest
-      entry.value := U(0, config.xlen bits)
-
-      val newEnd = end + 1
-      end := newEnd
-
-      when (newEnd === start) {
-        full := True
+    def getValue(regId: UInt): UInt = {
+      val ret = UInt(config.xlen bits)
+      ret := 0
+      when (regId =/= 0) {
+        ret := registerArray(regId)
       }
+      ret
+    }
 
-      end
+    def updateValue(regId: UInt, value: UInt): Unit = {
+      registerArray(regId) := value
     }
   }
 
-  class ReservationStation(stage: Stage) {
-    private val regs = pipeline.pipelineRegs(stage)
-    regs.shift := False
-
-    private val (robEntryIn, robEntryOut) = regs.addReg(data.ROB_ENTRY)
-    robEntryIn := 0
-
-    stage.arbitration.isStalled := False
-
-    val valid = Reg(Bool()).init(False)
-    stage.arbitration.isValid := valid
-
-    when (stage.arbitration.isDone) {
-      valid := False
-    }
-
-    def isAvailable: Bool = stage.arbitration.isAvailable
-
-    def execute(robEntry: UInt): Unit = {
-      robEntryIn := robEntry
-      regs.shift := True
-      valid := True
-    }
-  }
-
-  class Data {
+  class Data { // TODO: better name for this?
     object DEST_FU extends PipelineData(Bits(pipeline.exeStages.size bits))
-    object ROB_ENTRY extends PipelineData(UInt(log2Up(robSize) bits))
   }
 
-  lazy val data = new Data
+  lazy val data = new Data // TODO: better name for this?
 
   override def setup(): Unit = {
-    pipeline.getService[DecoderService].configure {config =>
+    pipeline.getService[DecoderService].configure { config =>
       config.addDefault(data.DEST_FU, B(0))
     }
   }
 
   override def finish(): Unit = {
     pipeline plug new Area {
-      val reservationStations = pipeline.exeStages.map(new ReservationStation(_))
-      val rob = new Rob
+      val registerFile = new RegisterFile
+      val rob = new ReorderBuffer(pipeline, registerFile, robCapacity)
+      val reservationStations = pipeline.exeStages.map(stage => new ReservationStation(stage, registerFile, rob, pipeline))
+      val cdb = new CommonDataBus(reservationStations, rob)
+      rob.build()
+      cdb.build()
+      for ((rs, index) <- reservationStations.zipWithIndex) {
+        rs.build()
+        rs.cdbStream >> cdb.inputs(index)
+      }
 
       // Dispatch
       val dispatchStage = pipeline.issuePipeline.stages.last
@@ -99,12 +55,12 @@ class Scheduler(val robSize: Int = 8) extends Plugin[DynamicPipeline] with Issue
 
         var context = when (fuMask === 0) {
           // TODO Illegal instruction
+          dispatchStage.arbitration.isStalled := True
         }
 
         for ((rs, index) <- reservationStations.zipWithIndex) {
           context = context.elsewhen (fuMask(index) && rs.isAvailable && rob.isAvailable) {
-            val robEntry = rob.push(dispatchStage.output(pipeline.data.RD))
-            rs.execute(robEntry)
+            rs.execute()
           }
         }
 
@@ -121,7 +77,7 @@ class Scheduler(val robSize: Int = 8) extends Plugin[DynamicPipeline] with Issue
         s"Stage ${stage.stageName} is not an execute stage")
     }
 
-    pipeline.getService[DecoderService].configure {config =>
+    pipeline.getService[DecoderService].configure { config =>
       var fuMask = 0
 
       for (exeStage <- pipeline.exeStages.reverse) {
