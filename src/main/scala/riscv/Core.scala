@@ -55,7 +55,8 @@ object createStaticPipeline {
       new MachineMode(pipeline.execute),
       new TrapHandler(pipeline.writeback),
       new Interrupts(pipeline.writeback),
-      new MulDiv(pipeline.execute)
+      new MulDiv(pipeline.execute),
+      new Mimicry
     ) ++ extraPlugins)
 
     if (build) {
