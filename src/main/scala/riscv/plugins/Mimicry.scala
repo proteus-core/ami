@@ -3,7 +3,7 @@ package riscv.plugins
 import riscv._
 import spinal.core._
 
-class Mimicry extends Plugin[Pipeline] {
+class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
 
   object Opcodes {
     val EMM = M"00000000000000000000000000001011" // Enable Mimicry Mode
@@ -15,6 +15,10 @@ class Mimicry extends Plugin[Pipeline] {
   }
 
   override def setup(): Unit = {
+    decodeStage plug new Area {
+      private val inMimicryMode = Reg(Bool).init(False)
+    }
+
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
         Data.MIMICRY_IS_ENABLED -> False
@@ -27,6 +31,11 @@ class Mimicry extends Plugin[Pipeline] {
       config.addDecoding(Opcodes.DMM, InstructionType.I, Map(
         Data.MIMICRY_IS_ENABLED -> False
       ))
+    }
+  }
+
+  override def build(): Unit = {
+    decodeStage plug new Area {
     }
   }
 }
