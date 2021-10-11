@@ -54,7 +54,8 @@ class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
         inMimicryMode  := False
       }
 
-      output(Data.MIMIC) := inMimicryMode
+      output(Data.MIMIC) := (inMimicryMode && !(value(Data.IGNORE_MIMICRY_MODE))
+                         || value(Data.ENABLE_MIMICRY_ONCE))
     }
   }
 }
