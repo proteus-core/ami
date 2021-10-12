@@ -65,14 +65,14 @@ class MemoryBackbone(implicit config: Config) extends Plugin with MemoryService 
     externalDBus
   }
 
-  override def createInternalIBus(stage: Stage): MemBus = {
+  override def createInternalIBus(stage: Stage, ibusLatency: Int): IBusControl = {
     assert(internalIBus == null)
 
     stage plug new Area {
       internalIBus = master(new MemBus(config.ibusConfig))
     }
 
-    internalIBus
+    new IBus(internalIBus, ibusLatency)
   }
 
   override def createInternalDBus(stage: Stage): MemBus = {
