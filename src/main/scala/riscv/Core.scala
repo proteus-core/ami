@@ -10,7 +10,7 @@ import spinal.lib.bus.amba4.axi._
 import spinal.lib.com.uart._
 
 object createStaticPipeline {
-  def apply(memory: MemoryService = null,
+  def apply(memory: Plugin[Pipeline] = null,
             disablePipelining: Boolean = false,
             extraPlugins: Seq[Plugin[Pipeline]] = Seq(),
             build: Boolean = true)
@@ -41,7 +41,10 @@ object createStaticPipeline {
       ))
     }
 
-    if (memory == null) {
+    if (memory != null) {
+      pipeline.addPlugin(memory)
+    }
+    else {
       pipeline.addPlugin(new MemoryBackbone)
     }
 
