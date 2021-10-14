@@ -2,9 +2,9 @@ package riscv.plugins
 
 import org.scalatest.funsuite.AnyFunSuite
 import riscv._
-import riscv.soc.{RamType, SoC}
+import riscv.soc._
 import spinal.core._
-import spinal.core.sim.{SimBoolPimper, SimClockDomainHandlePimper, SimConfig, SimTimeout}
+import spinal.core.sim._
 import spinal.lib.master
 
 class TIBus(implicit config: Config) extends IBusControl {
@@ -71,17 +71,28 @@ class TestMemoryBackbone(implicit config: Config) extends Plugin with MemoryServ
 }
 
 class MimicryTest extends AnyFunSuite {
-  test("Mimicry") {
-    implicit val config = new Config(BaseIsa.RV32I)
-    val hexFile = "src/test/resources/hex/mimicry.ihex"
+  test("mimicry-enable-disable") {
+    val hexFile = "src/test/resources/test-mimicry-enable-disable.ihex"
     val ramType = RamType.OnChipRam(10 MiB, Some(hexFile))
-    val m = new TestMemoryBackbone
-    //val m = new MemoryBackbone
+    implicit val config = new Config(BaseIsa.RV32I) // TODO
+    //val m = new TestMemoryBackbone
+    val m = new MemoryBackbone
+
     SimConfig.withWave.compile(new SoC(ramType, config => createStaticPipeline(memory = m)(config))).doSim { dut =>
-      SimTimeout(1000*10)
       dut.clockDomain.forkStimulus(10)
-      while (! dut.io.testDev.valid.toBoolean) {
+
+      SimTimeout(10*1000)
+      var done = false
+      while (! done) {
         dut.clockDomain.waitSampling()
+        if (dut.io.charOut.valid.toBoolean) {
+          val c = dut.io.charOut.payload.toInt.toChar
+          done = c == 4 // ASCII EOT (0x04) marks end of simulation
+
+          if (c == 2) { // ASCII STX (0x02) marks start of test
+
+          }
+        }
       }
     }
   }
