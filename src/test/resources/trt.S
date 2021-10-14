@@ -3,9 +3,10 @@
 
   .globl mark_start_of_test
 mark_start_of_test:
-  li x1, CHARDEV_ADDR
-  li x2, MARK_START_OF_TEST
-  sb x2, 0(x1)
+  li t1, CHARDEV_ADDR
+  li t2, MARK_START_OF_TEST
+  sb t2, 0(t1)
+  ret
 
   .globl enable_mimicry_mode
 enable_mimicry_mode:

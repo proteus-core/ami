@@ -82,15 +82,14 @@ class MimicryTest extends AnyFunSuite {
       dut.clockDomain.forkStimulus(10)
 
       SimTimeout(10*1000)
-      var done = false
-      while (! done) {
+      var char = 0
+      while (char != 4) {
         dut.clockDomain.waitSampling()
         if (dut.io.charOut.valid.toBoolean) {
-          val c = dut.io.charOut.payload.toInt.toChar
-          done = c == 4 // ASCII EOT (0x04) marks end of simulation
-
-          if (c == 2) { // ASCII STX (0x02) marks start of test
-
+          char = dut.io.charOut.payload.toInt.toChar
+²
+          if (char == 2) { // ASCII STX (0x02) marks start of test
+            // TODO
           }
         }
       }
