@@ -35,7 +35,7 @@ class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
       ))
 
       config.addDecoding(Opcodes.DMM, InstructionType.I, Map(
-        Data.DISABLE_MIMICRY_MODE -> False
+        Data.DISABLE_MIMICRY_MODE -> True
       ))
     }
   }
