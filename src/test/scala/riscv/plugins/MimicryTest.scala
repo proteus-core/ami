@@ -87,7 +87,7 @@ class MimicryTest extends AnyFunSuite {
         dut.clockDomain.waitSampling()
         if (dut.io.charOut.valid.toBoolean) {
           char = dut.io.charOut.payload.toInt.toChar
-²
+
           if (char == 2) { // ASCII STX (0x02) marks start of test
             // TODO
           }
