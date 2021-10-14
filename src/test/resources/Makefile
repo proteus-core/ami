@@ -16,8 +16,6 @@ clean:
 
 include ../../../../NewlibSupport/Makefile.include
 
-ASFLAGS = $(CFLAGS)
-
 CFLAGS += -ffunction-sections
 CFLAGS += -fdata-sections
 
