@@ -240,11 +240,11 @@ class MemBusControl(bus: MemBus)(implicit config: Config) extends Area {
   }
 }
 
-class IBus(
+class IBusControl(
    bus: MemBus,
    ibusLatency: Int,
    irQueueSize: Int = 4
- )(implicit config: Config) extends Area with IBusControl {
+ )(implicit config: Config) extends Area {
   assert(!bus.config.readWrite)
   assert(ibusLatency > 0)
 

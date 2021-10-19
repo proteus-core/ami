@@ -17,7 +17,7 @@ trait MemoryService {
   /**
     * Creates a new instruction bus to be used in stage.
     */
-  def createInternalIBus(stage: Stage, ibusLatency: Int): IBusControl
+  def createInternalIBus(stage: Stage): MemBus
 
   /**
     * Creates a new data bus to be used in stage.
@@ -51,10 +51,6 @@ trait MemoryService {
     * the context of the top-level Pipeline component.
     */
   def observeDBus(observer: MemBusObserver): Unit
-}
-
-trait IBusControl {
-  def read(address: UInt): (Bool, UInt)
 }
 
 trait FetchAddressTranslator {
