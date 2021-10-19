@@ -61,7 +61,7 @@ class ProteusTest:
       f.write(bytez)
       f.flush()
   
-      objdump  = "riscv32-unknown-elf-objdump"
+      objdump  = "riscv64-unknown-elf-objdump"
       objdump += " -D"
       objdump += " -b binary"
       objdump += " -m riscv"
