@@ -5,10 +5,10 @@ import ProteusTest
 
 class maddi(ProteusTest.ProteusTest):
 
-  def on_change_writeback_pc(self, vcd, m_addr, t, tn, pc):
+  def on_change_writeback_pc(self, vcd, m_addr, t, pc):
 
-    x5 = self.as_int(vcd, self.RF.x5_t0, tn)
-    x6 = self.as_int(vcd, self.RF.x6_t1, tn);
+    x5 = self.as_int(vcd, self.RF.x5_t0, self.nextt(t))
+    x6 = self.as_int(vcd, self.RF.x6_t1, self.nextt(t));
 
     if pc == m_addr:
       self.assertEqual(x5, 42)
