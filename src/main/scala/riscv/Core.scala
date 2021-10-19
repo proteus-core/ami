@@ -10,8 +10,7 @@ import spinal.lib.bus.amba4.axi._
 import spinal.lib.com.uart._
 
 object createStaticPipeline {
-  def apply(memory: Plugin[Pipeline] = null,
-            disablePipelining: Boolean = false,
+  def apply(disablePipelining: Boolean = false,
             extraPlugins: Seq[Plugin[Pipeline]] = Seq(),
             build: Boolean = true)
            (implicit conf: Config): StaticPipeline = {
@@ -41,14 +40,8 @@ object createStaticPipeline {
       ))
     }
 
-    if (memory != null) {
-      pipeline.addPlugin(memory)
-    }
-    else {
-      pipeline.addPlugin(new MemoryBackbone)
-    }
-
     pipeline.addPlugins(Seq(
+      new MemoryBackbone,
       new Fetcher(pipeline.fetch),
       new Decoder(pipeline.decode),
       new RegisterFileAccessor(pipeline.decode, pipeline.writeback),
@@ -64,7 +57,8 @@ object createStaticPipeline {
       new TrapHandler(pipeline.writeback),
       new Interrupts(pipeline.writeback),
       new MulDiv(pipeline.execute),
-      new Mimicry(pipeline.decode)
+      new Mimicry(pipeline.writeback),
+      new Marker
     ) ++ extraPlugins)
 
     if (build) {

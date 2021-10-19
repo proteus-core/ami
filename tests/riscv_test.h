@@ -60,4 +60,13 @@ start_tests:
     li tp, TESTDEV;                                                     \
     sw zero, 0(tp);
 
+#define RVTEST_MARK_NEXT                                                \
+    .word 0x0020000B
+
+#define MIMICRY_EMM                                                     \
+    .word 0x0000000B
+
+#define MIMICRY_DMM                                                     \
+    .word 0x0010000B
+
 #endif

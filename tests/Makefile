@@ -2,15 +2,18 @@ TESTS_DIR = $(abspath .)
 BASE_DIR = $(abspath $(TESTS_DIR)/..)
 RISCV_TESTS_DIR = $(TESTS_DIR)/riscv-tests
 ISA_TESTS_DIR = $(RISCV_TESTS_DIR)/isa
+PROTEUS_TESTS_DIR=$(TESTS_DIR)/proteus-tests
 BUILD_DIR = $(TESTS_DIR)/build
 SIM_DIR = $(BASE_DIR)/sim
 SIM_EXE = $(SIM_DIR)/build/sim
 CORE ?= riscv.CoreExtMem
 BUILD_CORE ?= 1
 
+PYTHON = python3
 RISCV_PREFIX = riscv64-unknown-elf
 CC = $(RISCV_PREFIX)-gcc
 LD = $(RISCV_PREFIX)-gcc
+OBJDUMP = $(RISCV_PREFIX)-objdump
 OBJCOPY = $(RISCV_PREFIX)-objcopy
 ARCHFLAGS = -march=rv32im -mabi=ilp32
 CFLAGS = $(ARCHFLAGS)
@@ -25,15 +28,18 @@ endif
 
 TEST_DIRS ?= $(ISA_TESTS_DIR)/rv32ui $(ISA_TESTS_DIR)/rv32mi $(ISA_TESTS_DIR)/rv32um $(CUSTOM_TESTS_DIR)
 ALL_ISA_TESTS = $(shell find $(TEST_DIRS) -name '*.S')
+ALL_PROTEUS_TESTS = $(shell find $(PROTEUS_TESTS_DIR) -name '*.S')
 UNSUPPORTED_TESTS = %fence_i.S %breakpoint.S
 ALL_TESTS = $(filter-out $(UNSUPPORTED_TESTS),$(ALL_ISA_TESTS))
-ALL_TARGETS = $(addsuffix .pass,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_TESTS)))))
 
-all: $(ALL_TARGETS)
+all: $(addsuffix .pass,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_TESTS)))))
+all: $(addsuffix .objdump,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_PROTEUS_TESTS)))))
+all: $(addsuffix .prot,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_PROTEUS_TESTS)))))
 
 .SECONDARY:
 
-VPATH = $(TEST_DIRS)
+VPATH  = $(TEST_DIRS)
+VPATH += $(PROTEUS_TESTS_DIR)
 
 $(BUILD_DIR)/%.o: %.S
 	mkdir -p $(@D)
@@ -45,6 +51,13 @@ $(BUILD_DIR)/%.o: %.S
 %.bin: %.elf
 	$(OBJCOPY) -O binary $^ $@
 
+%.objdump: %.elf
+	$(OBJDUMP) -d $< > $@
+
+%.vcd: %.bin
+	cd $(BUILD_DIR); $(SIM_EXE) $<
+	cd $(BUILD_DIR); cp sim.vcd $@
+
 $(SIM_EXE): $(FORCE)
 	make -C $(SIM_DIR) CORE=$(CORE)
 
@@ -53,3 +66,6 @@ $(SIM_EXE): $(FORCE)
 %.pass: %.bin $(SIM_EXE)
 	cd $(BASE_DIR); $(SIM_EXE) $<
 	touch $@
+
+%.prot: %.vcd
+	cd $(BUILD_DIR); $(PYTHON) $(PROTEUS_TESTS_DIR)/$(notdir $*).py $(VERBOSE)
