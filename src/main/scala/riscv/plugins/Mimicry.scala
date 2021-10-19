@@ -3,7 +3,7 @@ package riscv.plugins
 import riscv._
 import spinal.core._
 
-class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
+class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
   object Opcodes {
     val EMM = M"00000000000000000000000000001011" // Enable Mimicry Mode
@@ -12,12 +12,10 @@ class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
 
   object Data {
     object ENABLE_MIMICRY_ONCE  extends PipelineData(Bool()) // Mimic behavior for the current instruction only
+
     object ENABLE_MIMICRY_MODE  extends PipelineData(Bool()) // Enable mimicry mode
     object DISABLE_MIMICRY_MODE extends PipelineData(Bool()) // Disable mimicry mode
     object IGNORE_MIMICRY_MODE  extends PipelineData(Bool()) // Ignore mimicry mode for the current instruction only
-
-    object MIMIC                extends PipelineData(Bool()) // Propagates to further pipeline stages if the
-                                                             // the current instruction must be mimicked
   }
 
   override def setup(): Unit = {
@@ -26,8 +24,7 @@ class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
         Data.ENABLE_MIMICRY_ONCE  -> False,
         Data.ENABLE_MIMICRY_MODE  -> False,
         Data.DISABLE_MIMICRY_MODE -> False,
-        Data.IGNORE_MIMICRY_MODE  -> False,
-        Data.MIMIC                -> False
+        Data.IGNORE_MIMICRY_MODE  -> False
       ))
 
       config.addDecoding(Opcodes.EMM, InstructionType.I, Map(
@@ -41,21 +38,26 @@ class Mimicry(decodeStage: Stage) extends Plugin[Pipeline] {
   }
 
   override def build(): Unit = {
-    decodeStage plug new Area {
-      import decodeStage._
+    stage plug new Area {
+      import stage._
 
       private val inMimicryMode = Reg(Bool).init(False)
 
-      when (value(Data.ENABLE_MIMICRY_MODE)) {
-        inMimicryMode  := True
+      when (arbitration.isValid) {
+        when (value(Data.ENABLE_MIMICRY_MODE)) {
+          inMimicryMode := True
+        }
+
+        when (value(Data.DISABLE_MIMICRY_MODE)) {
+          inMimicryMode := False
+        }
       }
 
-      when (value(Data.DISABLE_MIMICRY_MODE)) {
-        inMimicryMode  := False
-      }
+      when (   (inMimicryMode && !(value(Data.IGNORE_MIMICRY_MODE)))
+            || value(Data.ENABLE_MIMICRY_ONCE)) {
 
-      output(Data.MIMIC) := (inMimicryMode && !(value(Data.IGNORE_MIMICRY_MODE))
-                         || value(Data.ENABLE_MIMICRY_ONCE))
+        output(pipeline.data.RD_TYPE) := RegisterType.NONE
+      }
     }
   }
 }
