@@ -103,7 +103,7 @@ riscv32-unknown-elf-objcopy -O binary mem.elf mem.bin
 
 ## Running the tests
 
-To run the [riscv-tests](https://github.com/riscv/riscv-tests) unit tests (make sure the RISC-V toolchain is in your `PATH`):
+To run the [riscv-tests](https://github.com/riscv/riscv-tests) unit tests (make sure the RISC-V toolchain is in your `PATH`) and the Proteus regression tests:
 
 ```
 make -C tests
