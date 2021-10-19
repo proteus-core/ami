@@ -9,7 +9,7 @@ before_script:
   # Install dependencies needed for adding the sbt repo
   - apt-get install apt-transport-https gnupg curl -yqq
   # Install dependencies needed for running the Proteus regression test suite
-  - apt-get install python3 -yqq
+  - apt-get install python3 python3-pip -yqq
   - python3 -m pip install --user vcdvcd
   # Add keyserver for SBT
   - echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" | tee /etc/apt/sources.list.d/sbt.list
