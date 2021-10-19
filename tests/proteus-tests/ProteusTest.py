@@ -126,7 +126,7 @@ class ProteusTest:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.decode_out_IR, t)
         instr = self.disassemble(instr)
-      self.on_change_decode_pc(self.vcd, self.m_addr, t, pc)
+      self.on_change_decode_pc(self.vcd, self.m_addr, t, t+10, pc)
 
     # EX
     spc = self.vcd[self.TOP.Core.pipeline_1.execute_out_PC]
@@ -134,7 +134,7 @@ class ProteusTest:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.execute_out_IR, t)
         instr = self.disassemble(instr)
-      self.on_change_execute_pc(self.vcd, self.m_addr, t, pc)
+      self.on_change_execute_pc(self.vcd, self.m_addr, t, t+10, pc)
 
     # MEM
     spc = self.vcd[self.TOP.Core.pipeline_1.memory_out_PC]
@@ -142,7 +142,7 @@ class ProteusTest:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.memory_out_IR, t)
         instr = self.disassemble(instr)
-      self.on_change_memory_pc(self.vcd, self.m_addr, t, pc)
+      self.on_change_memory_pc(self.vcd, self.m_addr, t, t+10, pc)
 
     # WB
     spc = self.vcd[self.TOP.Core.pipeline_1.writeback_out_PC]
@@ -151,21 +151,21 @@ class ProteusTest:
         instr = self.as_bytes(self.vcd, self.PL.writeback_out_IR, t)
         instr = self.disassemble(instr)
         print("%d %08x %s" % (t, pc, instr))
-      self.on_change_writeback_pc(self.vcd, self.m_addr, t, pc)
+      self.on_change_writeback_pc(self.vcd, self.m_addr, t, t+10, pc)
 
   #########################################################################
-  def on_change_decode_pc(self, vcd, m_addr, t, pc):
+  def on_change_decode_pc(self, vcd, m_addr, t, tn, pc):
     pass
 
   #########################################################################
-  def on_change_execute_pc(self, vcd, m_addr, t, pc):
+  def on_change_execute_pc(self, vcd, m_addr, t, tn, pc):
     pass
 
   #########################################################################
-  def on_change_memory_pc(self, vcd, m_addr, t, pc):
+  def on_change_memory_pc(self, vcd, m_addr, t, tn, pc):
     pass
 
   #########################################################################
-  def on_change_writeback_pc(self, vcd, m_addr, t, pc):
+  def on_change_writeback_pc(self, vcd, m_addr, t, tn, pc):
     pass
 

@@ -5,11 +5,11 @@ import ProteusTest
 
 class emm(ProteusTest.ProteusTest):
 
-  def on_change_writeback_pc(self, vcd, m_addr, t, pc):
+  def on_change_writeback_pc(self, vcd, m_addr, t, tn, pc):
 
-    inMimicryMode = self.as_int(vcd, self.WB.Mimicry_inMimicryMode, t)
+    inMimicryMode = self.as_int(vcd, self.WB.Mimicry_inMimicryMode, tn)
 
-    if pc == m_addr + 4:
+    if pc == m_addr:
       self.assertEqual(inMimicryMode, 1)
 
 if __name__ == '__main__':
