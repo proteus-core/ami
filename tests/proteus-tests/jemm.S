@@ -2,17 +2,18 @@
 # emm.S
 #-----------------------------------------------------------------------------
 #
-# Test 'enable mimicry mode' instruction.
+# Test jump over 'enable mimicry mode' instruction.
 #
 
 #include "riscv_test.h"
 
 RVTEST_CODE_BEGIN
 
-  RVTEST_MARK_NEXT
+  j 1f
   MIMICRY_EMM
-  MIMICRY_DMM
+1:
+  RVTEST_MARK_NEXT
+  nop
 
-  RVTEST_PASS
-
+RVTEST_PASS
 RVTEST_CODE_END
