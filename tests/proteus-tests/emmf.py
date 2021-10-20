@@ -9,7 +9,7 @@ class emmf(ProteusTest.ProteusTest):
 
     inMM = self.as_int(vcd, self.WB.Mimicry_inMimicryMode, self.nextt(t))
 
-    if pc == m_addr:
+    if pc == m_addr + 4:
       self.assertEqual(inMM, 1)
 
 if __name__ == '__main__':

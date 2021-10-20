@@ -2,8 +2,8 @@
 # emmf.S
 #-----------------------------------------------------------------------------
 #
-# Test 'enable mimicry mode' instruction the follows an instruction that causes
-#  a fatal exception
+# Test 'enable mimicry mode' instruction that follows an instruction that
+#  triggers a fatal exception
 #
 
 #include "riscv_test.h"
@@ -11,8 +11,8 @@
 RVTEST_CODE_BEGIN
 
   RVTEST_MARK_NEXT
+  # TODO: trigger fatal exception
   MIMICRY_EMM
-  MIMICRY_DMM
 
   RVTEST_PASS
 
