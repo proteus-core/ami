@@ -69,3 +69,4 @@ $(SIM_EXE): $(FORCE)
 
 %.prot: %.vcd
 	cd $(BUILD_DIR); $(PYTHON) $(PROTEUS_TESTS_DIR)/$(notdir $*).py $(VERBOSE)
+	touch $@
