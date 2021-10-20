@@ -6,6 +6,7 @@
 #
 
 #include "riscv_test.h"
+#include "test_macros.h"
 
 RVTEST_CODE_BEGIN
 
@@ -13,6 +14,6 @@ RVTEST_CODE_BEGIN
   RVTEST_MARK_NEXT
   MIMICRY_DMM
 
-  RVTEST_PASS
+  TEST_PASSFAIL
 
 RVTEST_CODE_END

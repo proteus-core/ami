@@ -7,13 +7,14 @@
 #
 
 #include "riscv_test.h"
+#include "test_macros.h"
 
 RVTEST_CODE_BEGIN
 
   RVTEST_MARK_NEXT
-  # TODO: trigger fatal exception
+  .word 0x00
   MIMICRY_EMM
 
-  RVTEST_PASS
+  TEST_PASSFAIL
 
 RVTEST_CODE_END

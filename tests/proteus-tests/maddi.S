@@ -7,6 +7,7 @@
 #
 
 #include "riscv_test.h"
+#include "test_macros.h"
 
 RVTEST_CODE_BEGIN
 
@@ -23,6 +24,6 @@ RVTEST_CODE_BEGIN
   #TODO: addi x5, x5, 1     # assert x5 == 43    (x5 == 44 would be wrong !)
   addi x6, x6, 1     # assert x6 == 43
 
-  RVTEST_PASS
+  TEST_PASSFAIL
 
 RVTEST_CODE_END
