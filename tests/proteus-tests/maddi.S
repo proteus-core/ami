@@ -5,6 +5,9 @@
 # 1. Test addi instruction after enabling mimicry mode
 # 2. Test addi instruction after disabling mimicry mode
 #
+# This test also verifies the forwarding logic at the boundary of mimicry mode
+# and non-mimicry mode.
+#
 
 #include "riscv_test.h"
 #include "test_macros.h"
