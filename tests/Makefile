@@ -54,7 +54,7 @@ $(BUILD_DIR)/%.o: %.S
 %.objdump: %.elf
 	$(OBJDUMP) -d $< > $@
 
-%.vcd: %.bin
+%.vcd: %.bin $(SIM_EXE)
 	cd $(BUILD_DIR); $(SIM_EXE) $<
 	cd $(BUILD_DIR); cp sim.vcd $@
 
