@@ -11,10 +11,11 @@
 
 RVTEST_CODE_BEGIN
 
-  li x5, 0xffffffff
+  li x5, -1
+  sw zero, 0(x5)
+  #MIMICRY_EMM
   RVTEST_MARK_NEXT
-  sw zero, 0(zero)
-  MIMICRY_EMM
+  nop
 
   TEST_PASSFAIL
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import sys
-import ProteusTest
+import MimicryTest
 
-class maddi(ProteusTest.ProteusTest):
+class maddi(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, m_addr, t, pc):
 
-    x5 = self.as_int(vcd, self.RF.x5_t0, self.nextt(t))
-    x6 = self.as_int(vcd, self.RF.x6_t1, self.nextt(t));
+    x5 = self.x5(vcd, self.nextt(t))
+    x6 = self.x6(vcd, self.nextt(t));
 
     if pc == m_addr:
       self.assertEqual(x5, 42)

@@ -21,7 +21,7 @@ RVTEST_CODE_BEGIN
   addi x5, x5, 1     # assert x5 == 42
   
   MIMICRY_DMM
-  #TODO: addi x5, x5, 1     # assert x5 == 43    (x5 == 44 would be wrong !)
+  #TODO: addi x5, x5, 1     # assert x5 == 43    (and not x5 == 44 !)
   addi x6, x6, 1     # assert x6 == 43
 
   TEST_PASSFAIL

@@ -15,6 +15,11 @@ class NestedNamespace(SimpleNamespace):
         self.__setattr__(key, value)
 
 #############################################################################
+class MyVCDVCD:
+  # TODO: Factor out vcd stuff from ProteusTest
+  pass
+
+#############################################################################
 class ProteusTest:
 
   ###########################################################################
@@ -53,6 +58,7 @@ class ProteusTest:
     self.run()
 
   ###########################################################################
+  # TODO: Move to utility library
   def disassemble(self, bytez):
   
     assert len(bytez) == 4
@@ -103,29 +109,8 @@ class ProteusTest:
         return t
     return None
 
-  ###########################################################################
-  def as_int(self, vcd, signal, time):
-    return int(vcd[signal][time], 2)
-
-  ###########################################################################
-  """
-  returns time t, n clock cycles later
-  """
-  def nextt(self, t, n=1):
-    return t + (n * 10)
-
-  ###########################################################################
-  def as_bytes(self, vcd, signal, time):
-    ident = vcd.references_to_ids[signal]
-    assert ident != None, "Invalid signal: '%s'" % signal
-    size = int(vcd.data[ident].size)
-    return int(vcd[signal][time], 2).to_bytes((size+7)//8, 'little')
-
-  ###########################################################################
-  def assertEqual(self, l, r):
-    assert l == r, (l, r)
-
   #########################################################################
+  # TODO: Generate the callbacks
   def run(self):
     # ID
     spc = self.vcd[self.TOP.Core.pipeline_1.decode_out_PC]
@@ -175,4 +160,42 @@ class ProteusTest:
   #########################################################################
   def on_change_writeback_pc(self, vcd, m_addr, t, pc):
     pass
+
+  ###########################################################################
+  def assertEqual(self, l, r):
+    assert l == r, (l, r)
+
+  ###########################################################################
+  def assertTrue(self, v):
+    assert v
+
+  ###########################################################################
+  def assertFalse(self, v):
+    assert not v
+
+  ###########################################################################
+  def as_int(self, vcd, signal, time):
+    return int(vcd[signal][time], 2)
+
+  ###########################################################################
+  def as_bytes(self, vcd, signal, time):
+    ident = vcd.references_to_ids[signal]
+    assert ident != None, "Invalid signal: '%s'" % signal
+    size = int(vcd.data[ident].size)
+    return int(vcd[signal][time], 2).to_bytes((size+7)//8, 'little')
+
+  ###########################################################################
+  """
+  Returns time t, n clock cycles later
+  """
+  def nextt(self, t, n=1):
+    return t + (n * 10)
+
+  #########################################################################
+  def x5(self, vcd, t):
+    return self.as_int(vcd, self.RF.x5_t0, t)
+
+  #########################################################################
+  def x6(self, vcd, t):
+    return self.as_int(vcd, self.RF.x6_t1, t)
 

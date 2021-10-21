@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 
 import sys
-import ProteusTest
+import MimicryTest
 
-class emmf(ProteusTest.ProteusTest):
+class emmf(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, m_addr, t, pc):
-
-    inMM = self.as_int(vcd, self.WB.Mimicry_inMimicryMode, self.nextt(t))
+  def on_change_decode_pc(self, vcd, m_addr, t, pc):
 
     if pc == m_addr + 4:
-      self.assertEqual(inMM, 1)
+      self.assertTrue(self.inMM(vcd, self.nextt(t)))
 
 if __name__ == '__main__':
   emmf(len(sys.argv) > 1)
