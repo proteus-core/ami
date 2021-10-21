@@ -199,3 +199,7 @@ class ProteusTest:
   def x6(self, vcd, t):
     return self.as_int(vcd, self.RF.x6_t1, t)
 
+  #########################################################################
+  def x7(self, vcd, t):
+    return self.as_int(vcd, self.RF.x7_t2, t)
+

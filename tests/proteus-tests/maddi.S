@@ -13,16 +13,18 @@ RVTEST_CODE_BEGIN
 
   MIMICRY_DMM
 
-  li x5, 42
-  li x6, 42
+  li x5, 0
+  li x6, 0
+  li x7, 0
   
   MIMICRY_EMM
   RVTEST_MARK_NEXT
-  addi x5, x5, 1     # assert x5 == 42
+  addi x5, x5, 1     # assert x5 == 0
+  addi x6, x6, 1     # assert x6 == 0
   
   MIMICRY_DMM
-  #TODO: addi x5, x5, 1     # assert x5 == 43    (and not x5 == 44 !)
-  addi x6, x6, 1     # assert x6 == 43
+  addi x6, x6, 1     # Tests forwarding, assert x6 == 1 (assert x6 != 2 )
+  addi x7, x7, 1     # assert x7 == 1 
 
   TEST_PASSFAIL
 

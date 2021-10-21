@@ -57,7 +57,7 @@ object createStaticPipeline {
       new TrapHandler(pipeline.writeback),
       new Interrupts(pipeline.writeback),
       new MulDiv(pipeline.execute),
-      new Mimicry(pipeline.writeback),
+      new Mimicry(pipeline.decode),
       new Marker
     ) ++ extraPlugins)
 

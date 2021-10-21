@@ -55,7 +55,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
       when (   (inMimicryMode && !(value(Data.IGNORE_MIMICRY_MODE)))
             || value(Data.ENABLE_MIMICRY_ONCE)) {
-        output(pipeline.data.RD_TYPE) := RegisterType.NONE
+        output(pipeline.data.RD_TYPE) := RegisterType.MIMIC
       }
     }
   }
