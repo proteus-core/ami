@@ -14,8 +14,6 @@
 
 RVTEST_CODE_BEGIN
 
-  MIMICRY_DMM
-
   li x5, 0
   li x6, 0
   li x7, 0
