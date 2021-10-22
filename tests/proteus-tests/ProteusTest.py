@@ -3,8 +3,41 @@ import subprocess
 import tempfile
 from vcdvcd import VCDVCD
 from types import SimpleNamespace
+
+# TODO: Split into different modules
+
+###########################################################################
+# TODO: Move to utility library
+def disassemble(bytez):
+
+  assert len(bytez) == 4
+
+  with tempfile.NamedTemporaryFile() as f:
+    f.write(bytez)
+    f.flush()
+
+    objdump  = "riscv64-unknown-elf-objdump"
+    objdump += " -D"
+    objdump += " -b binary"
+    objdump += " -m riscv"
+    objdump += " -M no-aliases"
+    objdump += " %s" % f.name
+
+    proc = subprocess.run(objdump.split(),
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+
+    if proc.returncode == 0:
+      for line in proc.stdout.split('\n'):
+        parts = line.split()
+        if len(parts) >= 3 and parts[0] == '0:':
+          return ' '.join(parts[2:])
+
+    return bytez.tostring()
  
 #############################################################################
+# TODO: Move to utility library
 class NestedNamespace(SimpleNamespace):
   def __init__(self, dictionary, **kwargs):
     super().__init__(**kwargs)
@@ -15,18 +48,11 @@ class NestedNamespace(SimpleNamespace):
         self.__setattr__(key, value)
 
 #############################################################################
+# VCDVCD wrapper
 class MyVCDVCD:
-  # TODO: Factor out vcd stuff from ProteusTest
-  pass
-
-#############################################################################
-class ProteusTest:
 
   ###########################################################################
-  def __init__(self, verbose):
-    vcdname = "%s.vcd" % self.__class__.__name__
-    self.verbose = verbose
-
+  def __init__(self, vcdname, signals=[]):
     # Build the signal namespace
     self.vcd = VCDVCD(vcdname, only_sigs=True)
     self.TOP = self.build_signal_namespace()
@@ -37,55 +63,21 @@ class ProteusTest:
     self.MEM = self.TOP.Core.pipeline_1.memory
     self.RF  = self.TOP.Core.pipeline_1.RegisterFileAccessor
 
-    # Load the data for the signals we are interested in. The empty list selects
-    # all signals.
-    signals = [
-    ]
-    self.vcd = VCDVCD(vcdname, signals=signals)
+    # Load the data for the signals we are interested in.
+    # The empty list selects all signals.
+    self.vcd = VCDVCD(vcdname, signals)
     if len(signals) > 0:
       assert set(signals) == set(self.vcd.signals), "Missing signals"
 
     # Get marker info
     self.m_epoch = self.find_marker()
     assert self.m_epoch, "Marker not found"
-    self.m_addr = self.as_int(self.vcd, self.PL.fetch_out_PC, self.m_epoch)
-    m_ir = self.as_bytes(self.vcd, self.PL.fetch_out_IR, self.m_epoch)
-    m_instr = self.disassemble(m_ir)
+    self.m_addr = self.as_int(self.PL.fetch_out_PC, self.m_epoch)
+    m_ir = self.as_bytes(self.PL.fetch_out_IR, self.m_epoch)
+    m_instr = disassemble(m_ir)
     #assert m_instr == "addi t0,t0,1", "Unexpected instr: '%s'" % m_instr
-    if self.verbose:
-      print("MARKER: EPOCH=%d ADDR=%08x INSTR=%s" % \
-                                      (self.m_epoch, self.m_addr, m_instr))
-    self.run()
-
-  ###########################################################################
-  # TODO: Move to utility library
-  def disassemble(self, bytez):
-  
-    assert len(bytez) == 4
-  
-    with tempfile.NamedTemporaryFile() as f:
-      f.write(bytez)
-      f.flush()
-  
-      objdump  = "riscv64-unknown-elf-objdump"
-      objdump += " -D"
-      objdump += " -b binary"
-      objdump += " -m riscv"
-      objdump += " -M no-aliases"
-      objdump += " %s" % f.name
-  
-      proc = subprocess.run(objdump.split(),
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            universal_newlines=True)
-  
-      if proc.returncode == 0:
-        for line in proc.stdout.split('\n'):
-          parts = line.split()
-          if len(parts) >= 3 and parts[0] == '0:':
-            return ' '.join(parts[2:])
-  
-      return bytez.tostring()
+    print("MARKER: EPOCH=%d ADDR=%08x INSTR=%s" % \
+                                        (self.m_epoch, self.m_addr, m_instr))
 
   ###########################################################################
   def build_signal_namespace(self):
@@ -109,41 +101,90 @@ class ProteusTest:
         return t
     return None
 
+  ###########################################################################
+  def signal(self, name):
+    return self.vcd[name]
+
+  ###########################################################################
+  def as_int(self, signal, time):
+    return int(self.vcd[signal][time], 2)
+
+  ###########################################################################
+  def as_bytes(self, signal, time):
+    ident = self.vcd.references_to_ids[signal]
+    assert ident != None, "Invalid signal: '%s'" % signal
+    size = int(self.vcd.data[ident].size)
+    return int(self.vcd[signal][time], 2).to_bytes((size+7)//8, 'little')
+
+  ###########################################################################
+  """
+  Returns time t, n clock cycles later
+  """
+  def nextt(self, t, n=1):
+    return t + (n * 10)
+
+  #########################################################################
+  def x5(self, t):
+    return self.as_int(self.RF.x5_t0, t)
+
+  #########################################################################
+  def x6(self, t):
+    return self.as_int(self.RF.x6_t1, t)
+
+  #########################################################################
+  def x7(self, t):
+    return self.as_int(self.RF.x7_t2, t)
+
+#############################################################################
+class ProteusTest:
+
+  ###########################################################################
+  def __init__(self, verbose):
+    vcdname = "%s.vcd" % self.__class__.__name__
+    self.verbose = verbose
+    self.vcd = MyVCDVCD(vcdname, [])
+    self.run()
+
   #########################################################################
   # TODO: Generate the callbacks
   def run(self):
+
+    vcd = self.vcd
+    m_epoch = self.vcd.m_epoch
+    m_addr = self.vcd.m_addr
+
     # ID
-    spc = self.vcd[self.TOP.Core.pipeline_1.decode_out_PC]
-    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= self.m_epoch]:
+    spc = vcd.signal(vcd.TOP.Core.pipeline_1.decode_out_PC)
+    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= m_epoch]:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.decode_out_IR, t)
-        instr = self.disassemble(instr)
-      self.on_change_decode_pc(self.vcd, self.m_addr, t, pc)
+        instr = disassemble(instr)
+      self.on_change_decode_pc(self.vcd, m_addr, t, pc)
 
     # EX
-    spc = self.vcd[self.TOP.Core.pipeline_1.execute_out_PC]
-    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= self.m_epoch]:
+    spc = vcd.signal(vcd.TOP.Core.pipeline_1.execute_out_PC)
+    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= m_epoch]:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.execute_out_IR, t)
-        instr = self.disassemble(instr)
-      self.on_change_execute_pc(self.vcd, self.m_addr, t, pc)
+        instr = disassemble(instr)
+      self.on_change_execute_pc(self.vcd, m_addr, t, pc)
 
     # MEM
-    spc = self.vcd[self.TOP.Core.pipeline_1.memory_out_PC]
-    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= self.m_epoch]:
+    spc = vcd.signal(vcd.TOP.Core.pipeline_1.memory_out_PC)
+    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= m_epoch]:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.memory_out_IR, t)
-        instr = self.disassemble(instr)
-      self.on_change_memory_pc(self.vcd, self.m_addr, t, pc)
+        instr = disassemble(instr)
+      self.on_change_memory_pc(self.vcd, m_addr, t, pc)
 
     # WB
-    spc = self.vcd[self.TOP.Core.pipeline_1.writeback_out_PC]
-    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= self.m_epoch]:
+    spc = vcd.signal(vcd.TOP.Core.pipeline_1.writeback_out_PC)
+    for t, pc in [(t, int(v, 2)) for (t, v) in spc.tv if t >= m_epoch]:
       if self.verbose:
         instr = self.as_bytes(self.vcd, self.PL.writeback_out_IR, t)
-        instr = self.disassemble(instr)
+        instr = disassemble(instr)
         print("%d %08x %s" % (t, pc, instr))
-      self.on_change_writeback_pc(self.vcd, self.m_addr, t, pc)
+      self.on_change_writeback_pc(self.vcd, m_addr, t, pc)
 
   #########################################################################
   def on_change_decode_pc(self, vcd, m_addr, t, pc):
@@ -172,34 +213,3 @@ class ProteusTest:
   ###########################################################################
   def assertFalse(self, v):
     assert not v
-
-  ###########################################################################
-  def as_int(self, vcd, signal, time):
-    return int(vcd[signal][time], 2)
-
-  ###########################################################################
-  def as_bytes(self, vcd, signal, time):
-    ident = vcd.references_to_ids[signal]
-    assert ident != None, "Invalid signal: '%s'" % signal
-    size = int(vcd.data[ident].size)
-    return int(vcd[signal][time], 2).to_bytes((size+7)//8, 'little')
-
-  ###########################################################################
-  """
-  Returns time t, n clock cycles later
-  """
-  def nextt(self, t, n=1):
-    return t + (n * 10)
-
-  #########################################################################
-  def x5(self, vcd, t):
-    return self.as_int(vcd, self.RF.x5_t0, t)
-
-  #########################################################################
-  def x6(self, vcd, t):
-    return self.as_int(vcd, self.RF.x6_t1, t)
-
-  #########################################################################
-  def x7(self, vcd, t):
-    return self.as_int(vcd, self.RF.x7_t2, t)
-
