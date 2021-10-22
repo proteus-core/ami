@@ -35,6 +35,14 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
         Data.DISABLE_MIMICRY_MODE -> True
       ))
     }
+
+    pipeline.getService[JumpService].onJump { (_, prevPc, nextPc, jumpType) =>
+      jumpType match {
+        case JumpType.Trap =>
+        case JumpType.TrapReturn =>
+        case _ =>
+      }
+    }
   }
 
   override def build(): Unit = {
