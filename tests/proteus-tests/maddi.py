@@ -8,8 +8,8 @@ class maddi(MimicryTest.MimicryTest):
   def on_change_writeback_pc(self, vcd, m_addr, t, pc):
 
     x5 = vcd.x5(vcd.nextt(t))
-    x6 = vcd.x6(vcd.nextt(t));
-    x7 = vcd.x7(vcd.nextt(t));
+    x6 = vcd.x6(vcd.nextt(t))
+    x7 = vcd.x7(vcd.nextt(t))
 
     if pc in (m_addr, m_addr+4, m_addr+8):
       self.assertEqual(x5, 0)
