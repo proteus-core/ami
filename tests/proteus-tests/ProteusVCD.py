@@ -16,6 +16,8 @@ class ProteusVCD:
     self.EX  = self.TOP.Core.pipeline_1.execute
     self.MEM = self.TOP.Core.pipeline_1.memory
     self.RF  = self.TOP.Core.pipeline_1.RegisterFileAccessor
+    self.RF  = self.TOP.Core.pipeline_1.RegisterFileAccessor
+    self.CSR = self.TOP.Core.pipeline_1.CsrFile_1
 
     # Load the data for the signals we are interested in.
     # The empty list selects all signals.

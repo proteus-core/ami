@@ -9,4 +9,4 @@ class MimicryTest(ProteusTest.ProteusTest):
   Returns true when the inMimicryMode signal is set at time t
   """
   def inMM(self, vcd, t): 
-    return vcd.as_int(vcd.ID.Mimicry_inMimicryMode, t) == 1
+    return vcd.as_int(vcd.CSR.CsrFile_mmime, t) == 1

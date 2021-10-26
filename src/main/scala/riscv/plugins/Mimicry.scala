@@ -2,37 +2,37 @@ package riscv.plugins
 
 import riscv._
 import spinal.core._
+import spinal.lib.slave
 
 class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
-  object Opcodes {
-    val EMM = M"00000000000000000000000000001011" // Enable Mimicry Mode
-    val DMM = M"00000000000100000000000000001011" // Disable Mimicry Mode
+  object Data {
+    object ENABLE_MIMICRY_ONCE extends PipelineData(Bool()) // Enable mimicry mode for the current instruction only
+    object IGNORE_MIMICRY_ONCE extends PipelineData(Bool()) // Ignore mimicry mode for the current instruction only
   }
 
-  object Data {
-    object ENABLE_MIMICRY_ONCE  extends PipelineData(Bool()) // Mimic behavior for the current instruction only
+  // mimicry mode status (mimstat) CSR
+  private class Mmimstat(implicit config: Config) extends Csr {
+    val mmime = Reg(Bool).init(False)   // mimicry mode enabled (mime)
+    val mpmime = Reg(Bool).init(False)  // prev mime (pmime)
 
-    object ENABLE_MIMICRY_MODE  extends PipelineData(Bool()) // Enable mimicry mode
-    object DISABLE_MIMICRY_MODE extends PipelineData(Bool()) // Disable mimicry mode
-    object IGNORE_MIMICRY_MODE  extends PipelineData(Bool()) // Ignore mimicry mode for the current instruction only
+    val mmimstat = B(0, config.xlen - 2 bits) ## mpmime ## mmime
+
+    override def read(): UInt = mmimstat.asUInt
+
+    override def write(value: UInt): Unit = {
+      mmime := value(0)
+      mpmime := value(1)
+    }
   }
 
   override def setup(): Unit = {
+    val csr = pipeline.getService[CsrService].registerCsr(0x7FF, new Mmimstat)
+
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
-        Data.ENABLE_MIMICRY_ONCE  -> False,
-        Data.ENABLE_MIMICRY_MODE  -> False,
-        Data.DISABLE_MIMICRY_MODE -> False,
-        Data.IGNORE_MIMICRY_MODE  -> False
-      ))
-
-      config.addDecoding(Opcodes.EMM, InstructionType.I, Map(
-        Data.ENABLE_MIMICRY_MODE -> True
-      ))
-
-      config.addDecoding(Opcodes.DMM, InstructionType.I, Map(
-        Data.DISABLE_MIMICRY_MODE -> True
+        Data.ENABLE_MIMICRY_ONCE -> False,
+        Data.IGNORE_MIMICRY_ONCE -> False
       ))
     }
 
@@ -46,25 +46,21 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
   }
 
   override def build(): Unit = {
-    stage plug new Area {
+    val mimicryArea = stage plug new Area {
       import stage._
 
-      private val inMimicryMode = Reg(Bool).init(False)
+      val mstatus = slave(new CsrIo)
+      val mime = mstatus.read()(0) // mime bit
 
-      when (arbitration.isValid) {
-        when (value(Data.ENABLE_MIMICRY_MODE)) {
-          inMimicryMode := True
-        }
-
-        when (value(Data.DISABLE_MIMICRY_MODE)) {
-          inMimicryMode := False
-        }
-      }
-
-      when (   (inMimicryMode && !(value(Data.IGNORE_MIMICRY_MODE)))
+      when (   (mime && !(value(Data.IGNORE_MIMICRY_ONCE)))
             || value(Data.ENABLE_MIMICRY_ONCE)) {
         output(pipeline.data.RD_TYPE) := RegisterType.MIMIC
       }
+    }
+
+    pipeline plug new Area {
+      val csr = pipeline.getService[CsrService]
+      mimicryArea.mstatus <> csr.getCsr(0x7FF)
     }
   }
 }

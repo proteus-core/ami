@@ -61,12 +61,12 @@ start_tests:
     sw zero, 0(tp);
 
 #define RVTEST_MARK_NEXT                                                \
-    .word 0x0020000B
+    .word 0x0b
 
 #define MIMICRY_EMM                                                     \
-    .word 0x0000000B
+    csrsi 0x7ff, 1
 
 #define MIMICRY_DMM                                                     \
-    .word 0x0010000B
+    csrci 0x7ff, 1
 
 #endif
