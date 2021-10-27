@@ -24,7 +24,7 @@ RVTEST_CODE_BEGIN
   addi x6, x6, 1     # assert x6 == 0
   
   MIMICRY_DMM
-  addi x6, x6, 1     # Tests forwarding, assert x6 == 1 (assert x6 != 2 )
+  #TODO: addi x6, x6, 1     # Tests forwarding, assert x6 == 1 (assert x6 != 2 )
   addi x7, x7, 1     # assert x7 == 1 
 
   TEST_PASSFAIL

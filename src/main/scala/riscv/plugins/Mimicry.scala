@@ -36,7 +36,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
       ))
     }
 
-    pipeline.getService[JumpService].onJump { (_, prevPc, nextPc, jumpType) =>
+    pipeline.getService[JumpService].onJump { (stage, prevPc, nextPc, jumpType) =>
       jumpType match {
         case JumpType.Trap =>
         case JumpType.TrapReturn =>
@@ -54,7 +54,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
       when (   (mime && !(value(Data.IGNORE_MIMICRY_ONCE)))
             || value(Data.ENABLE_MIMICRY_ONCE)) {
-        output(pipeline.data.RD_TYPE) := RegisterType.MIMIC
+        output(pipeline.data.RD_TYPE) := RegisterType.NONE
       }
     }
 

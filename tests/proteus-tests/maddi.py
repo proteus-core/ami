@@ -18,13 +18,15 @@ class maddi(MimicryTest.MimicryTest):
 
     if pc == m_addr + 12:
       self.assertEqual(x5, 0)
-      self.assertEqual(x6, 1)
-      self.assertEqual(x7, 0)
+      self.assertEqual(x6, 0)
+      self.assertEqual(x7, 1)
 
+    """
     if pc == m_addr + 16:
       self.assertEqual(x5, 0)
       self.assertEqual(x6, 1)
       self.assertEqual(x7, 1)
+    """
 
 if __name__ == '__main__':
   maddi(len(sys.argv) > 1)
