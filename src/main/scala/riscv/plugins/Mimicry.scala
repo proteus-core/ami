@@ -3,6 +3,7 @@ package riscv.plugins
 import riscv._
 import spinal.core._
 import spinal.lib.slave
+import scala.collection.mutable
 
 class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
@@ -27,7 +28,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
   }
 
   override def setup(): Unit = {
-    val csr = pipeline.getService[CsrService].registerCsr(0x7FF, new Mmimstat)
+    pipeline.getService[CsrService].registerCsr(0x7FF, new Mmimstat)
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
@@ -36,9 +37,20 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
       ))
     }
 
-    pipeline.getService[JumpService].onJump { (stage, prevPc, nextPc, jumpType) =>
+    pipeline.getService[JumpService].onJump { (_, _, _, jumpType) =>
+
       jumpType match {
         case JumpType.Trap =>
+          val mimstat = slave(new CsrIo)
+          val mimstatCurrent = mimstat.read()
+          val mimstatNew = UInt(config.xlen bits)
+          mimstatNew := mimstatCurrent
+          mimstatNew(0) := False             // mime = 0
+          mimstatNew(1) := mimstatCurrent(0) // pmime = mime
+          //mimstat.write(mimstatNew)
+          pipeline plug new Area {
+            mimstat <> pipeline.getService[CsrService].getCsr(0x7FF)
+          }
         case JumpType.TrapReturn =>
         case _ =>
       }
@@ -49,8 +61,8 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
     val mimicryArea = stage plug new Area {
       import stage._
 
-      val mstatus = slave(new CsrIo)
-      val mime = mstatus.read()(0) // mime bit
+      val mimstat = slave(new CsrIo)
+      val mime = mimstat.read()(0) // mime bit
 
       when (   (mime && !(value(Data.IGNORE_MIMICRY_ONCE)))
             || value(Data.ENABLE_MIMICRY_ONCE)) {
@@ -59,7 +71,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
     }
 
     pipeline plug new Area {
-      mimicryArea.mstatus <> pipeline.getService[CsrService].getCsr(0x7FF)
+      mimicryArea.mimstat <> pipeline.getService[CsrService].getCsr(0x7FF)
     }
   }
 }
