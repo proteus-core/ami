@@ -59,8 +59,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
     }
 
     pipeline plug new Area {
-      val csr = pipeline.getService[CsrService]
-      mimicryArea.mstatus <> csr.getCsr(0x7FF)
+      mimicryArea.mstatus <> pipeline.getService[CsrService].getCsr(0x7FF)
     }
   }
 }
