@@ -16,7 +16,14 @@ RVTEST_CODE_BEGIN
   RVTEST_MARK_NEXT
   sw zero, 0(x5)
   nop
+  MIMICRY_DMM
 
   TEST_PASSFAIL
+
+mtvec_handler:
+  csrr x5, CSR_MEPC
+  addi x5, x5, 4
+  csrw CSR_MEPC, x5
+  mret
 
 RVTEST_CODE_END
