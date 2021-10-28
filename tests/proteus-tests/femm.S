@@ -2,7 +2,7 @@
 # femm.S
 #-----------------------------------------------------------------------------
 #
-# Test 'enable mimicry mode' instruction followed by an instruction that
+# Test 'enable mimicry mode' instruction that follows an instruction that
 #  triggers a fatal exception in the memory stage
 #
 
@@ -12,8 +12,8 @@
 RVTEST_CODE_BEGIN
 
   li x5, -1
-  MIMICRY_EMM
   sw zero, 0(x5)
+  #TODO: MIMICRY_EMM
   RVTEST_MARK_NEXT
   nop
 
