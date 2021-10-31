@@ -7,19 +7,19 @@ import scala.collection.mutable
 
 class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
-  val CSR_MIMSTAT = 0x7FF
-  val CSR_MIMSTAT_MIME = 0
-  val CSR_MIMSTAT_PMIME = 1
+  val CSR_MMIMSTAT = 0x7FF   // mmimstat identifier
+  val CSR_MIMSTAT_MIME = 0   // mimicry mode enabled (mime)
+  val CSR_MIMSTAT_PMIME = 1  // previous mime (pmime)
 
   object Data {
     object ENABLE_MIMICRY_ONCE extends PipelineData(Bool()) // Enable mimicry mode for the current instruction only
     object IGNORE_MIMICRY_ONCE extends PipelineData(Bool()) // Ignore mimicry mode for the current instruction only
   }
 
-  // mimicry mode status (mimstat) CSR
+  // machine mimicry mode status (mmimstat) CSR
   private class Mmimstat(implicit config: Config) extends Csr {
-    val mmime = Reg(Bool).init(False)   // mimicry mode enabled (mime)
-    val mpmime = Reg(Bool).init(False)  // previous mime (pmime)
+    val mmime = Reg(Bool).init(False)
+    val mpmime = Reg(Bool).init(False)
 
     val mmimstat = B(0, config.xlen - 2 bits) ## mpmime ## mmime
 
@@ -32,13 +32,21 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
   }
 
   override def setup(): Unit = {
-    pipeline.getService[CsrService].registerCsr(CSR_MIMSTAT, new Mmimstat)
+    pipeline.getService[CsrService].registerCsr(CSR_MMIMSTAT, new Mmimstat)
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
         Data.ENABLE_MIMICRY_ONCE -> False,
         Data.IGNORE_MIMICRY_ONCE -> False
       ))
+
+      /*
+      config.addDecoding(M"------------------------------01",
+                         Map(Data.ENABLE_MIMICRY_ONCE -> True))
+
+      config.addDecoding(M"------------------------------10",
+                         Map(Data.IGNORE_MIMICRY_ONCE -> True))
+      */
     }
 
     pipeline.getService[JumpService].onJump { (_, _, _, jumpType) =>
@@ -61,7 +69,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
       mimstat.write(mimstatNew)
       
       pipeline plug new Area {
-        mimstat <> pipeline.getService[CsrService].getCsr(CSR_MIMSTAT)
+        mimstat <> pipeline.getService[CsrService].getCsr(CSR_MMIMSTAT)
       }
     }
   }
@@ -80,7 +88,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
     }
 
     pipeline plug new Area {
-      mimicryArea.mimstat <> pipeline.getService[CsrService].getCsr(CSR_MIMSTAT)
+      mimicryArea.mimstat <> pipeline.getService[CsrService].getCsr(CSR_MMIMSTAT)
     }
   }
 }
