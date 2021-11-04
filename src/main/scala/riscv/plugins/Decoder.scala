@@ -26,8 +26,15 @@ class Decoder(decodeStage: Stage) extends Plugin[Pipeline] with DecoderService {
   private val decodings = mutable.Map[MaskedLiteral, Action]()
   private val fixedRegisters = mutable.Map[MaskedLiteral, FixedRegisters]()
   private val defaults = mutable.Map[PipelineData[_ <: Data], Data]()
+  private var irMap: Option[IRMap] = None
 
   override protected val decoderConfig = new DecoderConfig {
+
+    override def addIRMap(map: IRMap): Unit = {
+      assert(irMap.isEmpty)
+      irMap = Some(map)
+    }
+
     override def addDecoding(opcode: MaskedLiteral,
                              itype: InstructionType,
                              action: Action): Unit = {
