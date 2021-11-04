@@ -77,11 +77,11 @@ trait DecoderService {
 
     /**
      * The IR Map can be used to analyze and/or transform the value of the
-     * instruction register prior to the actual decoding. The passed
-     * arguments are 1) the stage in which the instruction is decoded,
-     * and 2) the value of the IR register. The return value is the
-     * new value of the IR register, or the old value if no transformation
-     * was performed.
+     * instruction register (IR) prior to the actual decoding. It is useful for
+     * adding logic that is common to a set of instructions. The passed
+     * arguments are 1) the stage in which the instruction is decoded, and 2)
+     * the value of the IR register. The return value is the new value of the
+     * IR register, or the old value if no transformation was performed.
      */
     def addIRMap(map: IRMap): Unit
 
