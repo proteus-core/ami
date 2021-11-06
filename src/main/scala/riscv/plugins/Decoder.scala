@@ -96,10 +96,8 @@ class Decoder(decodeStage: Stage) extends Plugin[Pipeline] with DecoderService {
     decodeStage plug new Area {
       import decodeStage._
 
-      val ir = UInt(config.xlen bits)
-      if (irMap.isEmpty) {
-        ir := value(pipeline.data.IR)
-      } else {
+      val ir = value(pipeline.data.IR)
+      if (irMap.isDefined) {
         ir := irMap.get(decodeStage, value(pipeline.data.IR))
       }
 
