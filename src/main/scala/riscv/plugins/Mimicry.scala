@@ -11,9 +11,14 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
   val CSR_MIMSTAT_MIME = 0   // mimicry mode enabled (mime)
   val CSR_MIMSTAT_PMIME = 1  // previous mime (pmime)
 
+  val GHOST = 0
+  val MIMIC = 1
+  val EXECUTE = 2
+
   object Data {
-    object ENABLE_MIMICRY_ONCE extends PipelineData(Bool()) // Enable mimicry mode for the current instruction only
-    object IGNORE_MIMICRY_ONCE extends PipelineData(Bool()) // Ignore mimicry mode for the current instruction only
+    object GHOST extends PipelineData(Bool())   // Ghost instruction
+    object MIMIC extends PipelineData(Bool())   // Always mimic
+    object EXECUTE extends PipelineData(Bool()) // Always execute
   }
 
   // machine mimicry mode status (mmimstat) CSR
@@ -36,17 +41,23 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
-        Data.ENABLE_MIMICRY_ONCE -> False,
-        Data.IGNORE_MIMICRY_ONCE -> False
+        Data.GHOST -> False,
+        Data.MIMIC -> False,
+        Data.EXECUTE -> False
       ))
 
-      /*
-      config.addDecoding(M"------------------------------01",
-                         Map(Data.ENABLE_MIMICRY_ONCE -> True))
-
-      config.addDecoding(M"------------------------------10",
-                         Map(Data.IGNORE_MIMICRY_ONCE -> True))
-      */
+      config.setIrMapper((stage, ir) => {
+        var result = ir
+        when (ir =/= 0) {
+          switch (ir(1 downto 0)) {
+            is(GHOST)   { stage.output(Data.GHOST)   := True }
+            is(MIMIC)   { stage.output(Data.MIMIC)   := True }
+            is(EXECUTE) { stage.output(Data.EXECUTE) := True }
+          }
+          result = ir | 3
+        }
+        result
+      })
     }
 
     pipeline.getService[JumpService].onJump { (_, _, _, jumpType) =>
@@ -81,9 +92,12 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
       val mimstat = slave(new CsrIo)
       val mime = mimstat.read()(CSR_MIMSTAT_MIME)
 
-      when (   (mime && !(value(Data.IGNORE_MIMICRY_ONCE)))
-            || value(Data.ENABLE_MIMICRY_ONCE)) {
-        output(pipeline.data.RD_TYPE) := RegisterType.NONE
+      when (!value(Data.EXECUTE)) {
+        when (   value(Data.MIMIC)
+              || (mime && (!value(Data.GHOST)))
+              || (!mime && (value(Data.GHOST)))) {
+          output(pipeline.data.RD_TYPE) := RegisterType.NONE
+        }
       }
     }
 
