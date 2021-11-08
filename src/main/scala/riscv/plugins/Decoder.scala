@@ -26,13 +26,15 @@ class Decoder(decodeStage: Stage) extends Plugin[Pipeline] with DecoderService {
   private val decodings = mutable.Map[MaskedLiteral, Action]()
   private val fixedRegisters = mutable.Map[MaskedLiteral, FixedRegisters]()
   private val defaults = mutable.Map[PipelineData[_ <: Data], Data]()
-  private var irMap: Option[IRMap] = None
+
+  private val defaultIrMapper: IrMapper = (_, ir) => ir
+  private var irMapper = defaultIrMapper
 
   override protected val decoderConfig = new DecoderConfig {
 
-    override def addIRMap(map: IRMap): Unit = {
-      assert(irMap.isEmpty)
-      irMap = Some(map)
+    override def setIrMapper(mapper: IrMapper): Unit = {
+      assert(irMapper eq defaultIrMapper)
+      irMapper = mapper
     }
 
     override def addDecoding(opcode: MaskedLiteral,
@@ -96,16 +98,13 @@ class Decoder(decodeStage: Stage) extends Plugin[Pipeline] with DecoderService {
     decodeStage plug new Area {
       import decodeStage._
 
-      val ir = value(pipeline.data.IR)
-      if (irMap.isDefined) {
-        ir := irMap.get(decodeStage, value(pipeline.data.IR))
-      }
+      applyAction(decodeStage, defaults.toMap)
+
+      val ir = irMapper(decodeStage, value(pipeline.data.IR))
 
       output(pipeline.data.RS1) := ir(19 downto 15)
       output(pipeline.data.RS2) := ir(24 downto 20)
       output(pipeline.data.RD) := ir(11 downto 7)
-
-      applyAction(decodeStage, defaults.toMap)
 
       val immDecoder = ImmediateDecoder(ir.asBits)
 
