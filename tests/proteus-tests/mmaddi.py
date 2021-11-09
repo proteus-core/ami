@@ -3,7 +3,7 @@
 import sys
 import MimicryTest
 
-class maddi(MimicryTest.MimicryTest):
+class mmaddi(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, m_addr, t, pc):
 
@@ -29,4 +29,4 @@ class maddi(MimicryTest.MimicryTest):
     """
 
 if __name__ == '__main__':
-  maddi(len(sys.argv) > 1)
+  mmaddi(len(sys.argv) > 1)
