@@ -18,6 +18,14 @@ OBJCOPY = $(RISCV_PREFIX)-objcopy
 ARCHFLAGS = -march=rv32im -mabi=ilp32
 CFLAGS = $(ARCHFLAGS)
 
+MORPHEUS_TOOLCHAIN_DIR = /home/hans/kul/phd/llvm-project/install
+OBJDUMP = $(MORPHEUS_TOOLCHAIN_DIR)/bin/llvm-objdump
+CC = $(MORPHEUS_TOOLCHAIN_DIR)/bin/clang
+CFLAGS =
+CFLAGS += --target=riscv32
+CFLAGS += -march=rv32im
+CFLAGS += -nostdlib
+
 ifeq ($(BUILD_CORE),1)
 FORCE = FORCE
 else
