@@ -20,6 +20,10 @@ before_script:
   # Log the dependency versions
   - verilator --version
   - sbt sbtVersion
+  # Install morpheus toolchain
+  - wget https://gitlab.kuleuven.be/u0126303/llvm-project/-/jobs/artifacts/main/download?job=build -O artefacts.zip
+  - unzip artefacts.zip
+  - dpkg -i morpheus.deb
   # Update all submodules (e.g., riscv-tests)
   - git submodule update --init
 
