@@ -21,8 +21,8 @@ before_script:
   - verilator --version
   - sbt sbtVersion
   # Install morpheus toolchain
-  - apt-get install wget -yqq
-  - wget https://gitlab.kuleuven.be/u0126303/llvm-project/-/jobs/artifacts/main/download?job=build -O artefacts.zip
+  - apt-get install wget unzip -yqq
+  - wget -q https://gitlab.kuleuven.be/u0126303/llvm-project/-/jobs/artifacts/main/download?job=build -O artefacts.zip
   - unzip artefacts.zip
   - dpkg -i dist/morpheus.deb
   # Update all submodules (e.g., riscv-tests)
