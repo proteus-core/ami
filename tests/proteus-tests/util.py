@@ -58,10 +58,24 @@ def llvm_objdump(f):
                           universal_newlines=True)
 
 ###########################################################################
-def disassemble(bytez):
+def gnu_disassemble(bytez):
+  with tempfile.NamedTemporaryFile() as f:
+    f.write(bytez)
+    f.flush()
 
-  assert len(bytez) == 4
+    proc = gnu_objdump(f)
 
+    if proc.returncode == 0:
+      for line in proc.stdout.split('\n'):
+        parts = line.split()
+        if len(parts) >= 3 and parts[0] == '0:':
+          return ' '.join(parts[2:])
+
+    return bytez.hex()
+
+
+###########################################################################
+def llvm_disassemble(bytez):
   with tempfile.NamedTemporaryFile() as f:
     f.write(bytez)
     f.flush()
@@ -72,20 +86,17 @@ def disassemble(bytez):
       for line in proc.stdout.split('\n'):
         parts = line.split()
         if len(parts) >= 3 and parts[0] == '0:':
-          #return ' '.join(parts[2:])
           return ' '.join(parts[5:])
 
     return bytez.hex()
 
 ###########################################################################
-def disassemble2(bytez):
-  assert len(bytez) == 4
+def llvm_disassemble_mc(bytez):
+  mc  = "/home/hans/devel/llvm-project/install/bin/llvm-mc"
+  mc += " --arch=riscv32"
+  mc += " --mdis"
 
-  cl  = "/home/hans/devel/llvm-project/install/bin/llvm-mc"
-  cl += " --arch=riscv32"
-  cl += " --mdis"
-
-  p = subprocess.Popen(cl.split(),
+  p = subprocess.Popen(mc.split(),
                        stdin=subprocess.PIPE,
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
@@ -93,3 +104,10 @@ def disassemble2(bytez):
   (stdout, stderr) = p.communicate(input=hexbytes.encode())
 
   return stdout.decode().split('\n')[1].strip().replace('\t', ' ')
+
+###########################################################################
+def disassemble(bytez):
+  assert len(bytez) == 4
+  #eturn gnu_disassemble(bytez)
+  return llvm_disassemble(bytez)
+  #eturn llvm_disassemble_mc(bytez)
