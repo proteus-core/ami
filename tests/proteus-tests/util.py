@@ -20,7 +20,7 @@ def gnu_objdump(f):
 def gnu_objcopy(f1, f2):
   result = tempfile.NamedTemporaryFile()
 
-  objcopy  = "riscv32-unknown-elf-objcopy"
+  objcopy  = "riscv64-unknown-elf-objcopy"
   objcopy += " -I binary"
   objcopy += " -O elf32-littleriscv"
   objcopy += " %s" % f1.name
