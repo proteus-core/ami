@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib.slave
 import scala.collection.mutable
 
-class Mimicry(stage: Stage) extends Plugin[Pipeline] {
+class Mimicry() extends Plugin[Pipeline] {
 
   val CSR_MMIMSTAT = 0x7FF   // mmimstat identifier
   val CSR_MIMSTAT_MIME = 0   // mimicry mode enabled (mime)
@@ -45,6 +45,8 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
         Data.MIMIC -> False,
         Data.EXECUTE -> False
       ))
+
+      val stage = pipeline.retirementStage
 
       config.setIrMapper((stage, ir) => {
         var result = ir
@@ -86,6 +88,7 @@ class Mimicry(stage: Stage) extends Plugin[Pipeline] {
   }
 
   override def build(): Unit = {
+    val stage = pipeline.retirementStage
     val mimicryArea = stage plug new Area {
       import stage._
 
