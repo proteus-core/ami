@@ -100,7 +100,7 @@ def llvm_disassemble_mc(bytez):
                        stdin=subprocess.PIPE,
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
-  hexbytes = " ".join(['0x%02x' % x for x in instr])
+  hexbytes = " ".join(['0x%02x' % x for x in bytez])
   (stdout, stderr) = p.communicate(input=hexbytes.encode())
 
   return stdout.decode().split('\n')[1].strip().replace('\t', ' ')
@@ -108,6 +108,9 @@ def llvm_disassemble_mc(bytez):
 ###########################################################################
 def disassemble(bytez):
   assert len(bytez) == 4
-  #eturn gnu_disassemble(bytez)
-  return llvm_disassemble(bytez)
-  #eturn llvm_disassemble_mc(bytez)
+  #esult = gnu_disassemble(bytez)
+  result = llvm_disassemble(bytez)
+  #esult = llvm_disassemble_mc(bytez)
+  if result.find("unknown") > 0:
+    result = bytez.hex()
+  return result
