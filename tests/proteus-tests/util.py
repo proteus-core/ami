@@ -1,6 +1,19 @@
 from types import SimpleNamespace
 import subprocess
 import tempfile
+ 
+#############################################################################
+class NestedNamespace(SimpleNamespace):
+
+  def __init__(self, dictionary, **kwargs):
+
+    super().__init__(**kwargs)
+
+    for key, value in dictionary.items():
+      if isinstance(value, dict):
+        self.__setattr__(key, NestedNamespace(value))
+      else:
+        self.__setattr__(key, value)
 
 ###########################################################################
 def gnu_objdump(f):
@@ -43,7 +56,7 @@ def llvm_objdump(f):
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,
                           universal_newlines=True)
-  
+
 ###########################################################################
 def disassemble(bytez):
 
@@ -63,16 +76,20 @@ def disassemble(bytez):
           return ' '.join(parts[5:])
 
     return bytez.hex()
- 
-#############################################################################
-class NestedNamespace(SimpleNamespace):
 
-  def __init__(self, dictionary, **kwargs):
+###########################################################################
+def disassemble2(bytez):
+  assert len(bytez) == 4
 
-    super().__init__(**kwargs)
+  cl  = "/home/hans/devel/llvm-project/install/bin/llvm-mc"
+  cl += " --arch=riscv32"
+  cl += " --mdis"
 
-    for key, value in dictionary.items():
-      if isinstance(value, dict):
-        self.__setattr__(key, NestedNamespace(value))
-      else:
-        self.__setattr__(key, value)
+  p = subprocess.Popen(cl.split(),
+                       stdin=subprocess.PIPE,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+  hexbytes = " ".join(['0x%02x' % x for x in instr])
+  (stdout, stderr) = p.communicate(input=hexbytes.encode())
+
+  return stdout.decode().split('\n')[1].strip().replace('\t', ' ')
