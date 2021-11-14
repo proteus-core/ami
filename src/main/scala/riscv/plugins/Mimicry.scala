@@ -25,14 +25,30 @@ class Mimicry() extends Plugin[Pipeline] {
   private class Mmimstat(implicit config: Config) extends Csr {
     val mmime = Reg(Bool).init(False)
     val mpmime = Reg(Bool).init(False)
+    // Keep track of number of nested activations
+    val mdepth = Reg(UInt(config.xlen - 2 bits)).init(0)
 
-    val mmimstat = B(0, config.xlen - 2 bits) ## mpmime ## mmime
+    val mmimstat = mdepth ## mpmime ## mmime
 
     override def read(): UInt = mmimstat.asUInt
 
     override def write(value: UInt): Unit = {
       mmime := value(CSR_MIMSTAT_MIME)
       mpmime := value(CSR_MIMSTAT_PMIME)
+      mdepth := value(config.xlen-1 downto 2)
+    }
+
+    override def swWrite(value: UInt): Unit = {
+      when (value.lsb) {
+        mmime := True
+        mdepth := mdepth + 1
+      } otherwise {
+        // TODO: assert mdepth > 0
+        when (mdepth === 1) {
+          mmime := False
+        }
+        mdepth := mdepth - 1
+      }
     }
   }
 
