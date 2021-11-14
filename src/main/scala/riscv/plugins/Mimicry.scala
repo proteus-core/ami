@@ -3,19 +3,15 @@ package riscv.plugins
 import riscv._
 import spinal.core._
 import spinal.lib.slave
-import scala.collection.mutable
 
 class Mimicry() extends Plugin[Pipeline] {
 
-  val CSR_MMIMSTAT = 0x7FF   // mmimstat identifier
-  val CSR_MIMSTAT_MIME = 0   // mimicry mode enabled (mime)
-  val CSR_MIMSTAT_PMIME = 1  // previous mime (pmime)
+  private val CSR_MMIMSTAT = 0x7FF   // mmimstat identifier
+  private val CSR_MIMSTAT_MIME = 0   // mimicry mode enabled (mime)
+  private val CSR_MIMSTAT_PMIME = 1  // previous mime (pmime)
+  private val CSR_MIMSTAT_DEPTH = (31 downto 2)  // activation nesting level
 
-  val GHOST = 0
-  val MIMIC = 1
-  val EXECUTE = 2
-
-  object Data {
+  private object Data {
     object GHOST extends PipelineData(Bool())   // Ghost instruction
     object MIMIC extends PipelineData(Bool())   // Always mimic
     object EXECUTE extends PipelineData(Bool()) // Always execute
@@ -25,8 +21,7 @@ class Mimicry() extends Plugin[Pipeline] {
   private class Mmimstat(implicit config: Config) extends Csr {
     val mmime = Reg(Bool).init(False)
     val mpmime = Reg(Bool).init(False)
-    // Keep track of number of nested activations
-    val mdepth = Reg(UInt(config.xlen - 2 bits)).init(0)
+    val mdepth = Reg(UInt(CSR_MIMSTAT_DEPTH.length bits)).init(0)
 
     val mmimstat = mdepth ## mpmime ## mmime
 
@@ -35,7 +30,7 @@ class Mimicry() extends Plugin[Pipeline] {
     override def write(value: UInt): Unit = {
       mmime := value(CSR_MIMSTAT_MIME)
       mpmime := value(CSR_MIMSTAT_PMIME)
-      mdepth := value(config.xlen-1 downto 2)
+      mdepth := value(CSR_MIMSTAT_DEPTH)
     }
 
     override def swWrite(value: UInt): Unit = {
@@ -43,11 +38,10 @@ class Mimicry() extends Plugin[Pipeline] {
         mmime := True
         mdepth := mdepth + 1
       } otherwise {
-        // TODO: assert mdepth > 0
         when (mdepth === 1) {
           mmime := False
         }
-        mdepth := mdepth - 1
+        mdepth := mdepth - 1   // TODO: assert mdepth > 0
       }
     }
   }
@@ -68,9 +62,9 @@ class Mimicry() extends Plugin[Pipeline] {
         var result = ir
         when (ir =/= 0) {
           switch (ir(1 downto 0)) {
-            is(GHOST)   { stage.output(Data.GHOST)   := True }
-            is(MIMIC)   { stage.output(Data.MIMIC)   := True }
-            is(EXECUTE) { stage.output(Data.EXECUTE) := True }
+            is(0) { stage.output(Data.GHOST)   := True }
+            is(1) { stage.output(Data.MIMIC)   := True }
+            is(2) { stage.output(Data.EXECUTE) := True }
           }
           result = ir | 3
         }
@@ -104,6 +98,7 @@ class Mimicry() extends Plugin[Pipeline] {
   }
 
   override def build(): Unit = {
+
     val stage = pipeline.retirementStage
     val mimicryArea = stage plug new Area {
       import stage._
