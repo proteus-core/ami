@@ -2,7 +2,7 @@
 # nemm.S
 #-----------------------------------------------------------------------------
 #
-# Test nesting of 'enable mimicry mode' instructions.
+# Test nesting of mimicry activations
 #
 
 #include "riscv_test.h"
