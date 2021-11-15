@@ -1,0 +1,23 @@
+#*****************************************************************************
+# nemm.S
+#-----------------------------------------------------------------------------
+#
+# Test nesting of 'enable mimicry mode' instructions.
+#
+
+#include "riscv_test.h"
+#include "test_macros.h"
+
+RVTEST_CODE_BEGIN
+
+  RVTEST_MARK_NEXT
+  nop
+  MIMICRY_EMM
+  MIMICRY_EMM
+  MIMICRY_DMM
+  MIMICRY_DMM
+  nop
+
+  TEST_PASSFAIL
+
+RVTEST_CODE_END

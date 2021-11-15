@@ -10,3 +10,9 @@ class MimicryTest(ProteusTest.ProteusTest):
   """
   def inMM(self, vcd, t): 
     return vcd.as_int(vcd.CSR.CsrFile_mmime, t) == 1
+
+  """
+  Returns activation nesting level
+  """
+  def mmDepth(self, vcd, t):
+    return vcd.as_int(vcd.CSR.CsrFile_mdepth, t)
