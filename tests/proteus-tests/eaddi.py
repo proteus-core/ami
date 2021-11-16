@@ -7,12 +7,21 @@ class eaddi(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, m_addr, t, pc):
 
-    x5 = vcd.x5(vcd.nextt(t))
+    tn = vcd.nextt(t)
 
-    if pc in (m_addr, m_addr+4):
+    is_execute = self.is_execute(vcd, t)
+    x5 = vcd.x5(tn)
+
+    if pc == m_addr:
+      self.assertTrue(is_execute)
+      self.assertEqual(x5, 1)
+
+    if pc == m_addr+4:
+      self.assertFalse(is_execute)
       self.assertEqual(x5, 1)
 
     if pc == m_addr+8:
+      self.assertTrue(is_execute)
       self.assertEqual(x5, 2)
 
 if __name__ == '__main__':
