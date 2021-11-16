@@ -33,4 +33,4 @@ test:
     # Execute base RV32IM tests and Proteus regression test suite
     - make -C tests
     # Execute base RV32IM tests on the dynamic pipeline
-    - make CORE=riscv.CoreDynamicExtMem -C tests
+    #- make CORE=riscv.CoreDynamicExtMem -C tests
