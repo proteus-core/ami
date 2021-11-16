@@ -8,13 +8,13 @@ class MimicryTest(ProteusTest.ProteusTest):
   """
   Returns true if the inMimicryMode signal is set at time t
   """
-  def inMM(self, vcd, t): 
+  def in_mm(self, vcd, t): 
     return vcd.as_int(vcd.CSR.CsrFile_mmime, t) == 1
 
   """
   Returns activation nesting level at time t
   """
-  def mmDepth(self, vcd, t):
+  def mm_depth(self, vcd, t):
     return vcd.as_int(vcd.CSR.CsrFile_mdepth, t)
 
   """

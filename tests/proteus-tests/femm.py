@@ -8,7 +8,7 @@ class femm(MimicryTest.MimicryTest):
   def on_change_writeback_pc(self, vcd, m_addr, t, pc):
 
     if pc == m_addr:
-      self.assertTrue(self.inMM(vcd, self.nextt(t)))
+      self.assertTrue(self.in_mm(vcd, self.nextt(t)))
 
 if __name__ == '__main__':
   femm(len(sys.argv) > 1)
