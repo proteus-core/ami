@@ -30,7 +30,6 @@ before_script:
 
 test:
   script:
-<<<<<<< HEAD
     # Execute base RV32IM tests and Proteus regression test suite
     - make -C tests
     # Execute base RV32IM tests on the dynamic pipeline
