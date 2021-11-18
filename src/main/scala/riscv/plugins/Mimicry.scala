@@ -6,6 +6,8 @@ import spinal.lib.slave
 
 class Mimicry() extends Plugin[Pipeline] {
 
+  override def getImplementedExtensions = Seq('X')
+
   private val CSR_MMIMSTAT = 0x7FF   // mmimstat identifier
   private val CSR_MIMSTAT_MIME = 0   // mimicry mode enabled (mime)
   private val CSR_MIMSTAT_PMIME = 1  // previous mime (pmime)
