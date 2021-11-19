@@ -12,7 +12,7 @@ class maddi(MimicryTest.MimicryTest):
     x5 = vcd.x5(tn)
     x6 = vcd.x6(tn)
     x7 = vcd.x7(tn)
-    is_mimic = self.is_mimic(vcd, t)
+    is_mimic = vcd.as_int(vcd.WB.value_MIMIC, t) == 1
 
     if pc == m_addr:
       self.assertTrue(is_mimic)

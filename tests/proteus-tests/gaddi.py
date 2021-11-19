@@ -9,7 +9,7 @@ class gaddi(MimicryTest.MimicryTest):
 
     tn = vcd.nextt(t)
 
-    is_ghost = self.is_ghost(vcd, t)
+    is_ghost = vcd.as_int(vcd.WB.value_GHOST, t) == 1
     x5 = vcd.x5(tn)
 
     if pc == m_addr  :

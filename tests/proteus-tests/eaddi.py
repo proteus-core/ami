@@ -9,7 +9,7 @@ class eaddi(MimicryTest.MimicryTest):
 
     tn = vcd.nextt(t)
 
-    is_execute = self.is_execute(vcd, t)
+    is_execute = vcd.as_int(vcd.WB.value_EXECUTE, t) == 1
     x5 = vcd.x5(tn)
 
     if pc == m_addr:

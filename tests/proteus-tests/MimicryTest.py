@@ -10,30 +10,3 @@ class MimicryTest(ProteusTest.ProteusTest):
   """
   def in_mm(self, vcd, t): 
     return vcd.as_int(vcd.CSR.CsrFile_mime, t) == 1
-
-  """
-  Returns activation nesting level at time t
-  """
-  def mm_depth(self, vcd, t):
-    return vcd.as_int(vcd.CSR.CsrFile_depth, t)
-
-  """
-  Returns true if the instruction in the wb stage at time t is a ghost
-  instruction.
-  """
-  def is_ghost(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_GHOST, t) == 1
-
-  """
-  Returns true if the instruction in the wb stage at time t is an execute
-  instruction.
-  """
-  def is_execute(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_EXECUTE, t) == 1
-
-  """
-  Returns true if the instruction in the wb stage at time t is a mimic
-  instruction.
-  """
-  def is_mimic(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_MIMIC, t) == 1
