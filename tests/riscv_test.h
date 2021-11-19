@@ -69,4 +69,7 @@ start_tests:
 #define MIMICRY_DMM                                                     \
     csrci 0x7ff, 1
 
+#define MIMICRY_INVERT                                                  \
+    csrsi 0x7ff, 8
+
 #endif
