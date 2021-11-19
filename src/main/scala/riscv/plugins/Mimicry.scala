@@ -74,7 +74,7 @@ class Mimicry() extends Plugin[Pipeline] {
       })
     }
 
-    pipeline.getService[JumpService].onJump { (_, _, _, jumpType) =>
+    pipeline.getService[JumpService].onJump { (stage, _, _, jumpType) =>
 
       val mimstat = Utils.outsideConditionScope(slave(new CsrIo))
       val mimstatCurrent = mimstat.read()
@@ -88,7 +88,12 @@ class Mimicry() extends Plugin[Pipeline] {
         case JumpType.TrapReturn =>
           mimstatNew(CSR_MIMSTAT_MIME) := mimstatCurrent(CSR_MIMSTAT_PMIME)
           mimstatNew(CSR_MIMSTAT_PMIME) := False
-        case _ => {}
+        case JumpType.Normal =>
+          when (stage.value(Data.MIMIC)) {
+            // Register branch outcome and fall through
+            // TODO: mimstatNew(CSR_MIMSTAT_XXX) := branch-outcome
+            pipeline.getService[JumpService].disableJump(stage)
+          }
       }
 
       mimstat.write(mimstatNew)
