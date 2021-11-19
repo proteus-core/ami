@@ -26,7 +26,7 @@ class Mimicry() extends Plugin[Pipeline] {
     val mime    = Reg(Bool).init(False)
     val pmime   = Reg(Bool).init(False)
     val outcome = Reg(Bool).init(False)
-    val invert  = Reg(Bool).init(False)
+    val invert  = 0
     val depth   = Reg(UInt(CSR_MIMSTAT_DEPTH.length bits)).init(0)
 
     val mmimstat = depth ## invert ## outcome ## pmime ## mime
