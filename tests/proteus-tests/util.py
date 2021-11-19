@@ -92,7 +92,7 @@ def llvm_disassemble(bytez):
 
 ###########################################################################
 def llvm_disassemble_mc(bytez):
-  mc  = "/home/hans/devel/llvm-project/install/bin/llvm-mc"
+  mc  = "/home/hans/devel/morpheus/llvm-project/install/bin/llvm-mc"
   mc += " --arch=riscv32"
   mc += " --mdis"
 
