@@ -12,10 +12,30 @@ class invmm(MimicryTest.MimicryTest):
     depth = vcd.as_int(vcd.CSR.CsrFile_depth, tn)
 
     if pc == m_addr:
+      self.assertTrue(last == 0)
+      self.assertTrue(depth == 0)
+
+    if pc == m_addr+4:
       self.assertTrue(last == 1)
       self.assertTrue(depth == 1)
 
-    if pc == m_addr+4:
+    if pc == m_addr+8:
+      self.assertTrue(last == 1)
+      self.assertTrue(depth == 2)
+
+    if pc == m_addr+12:
+      self.assertTrue(last == 0)
+      self.assertTrue(depth == 1)
+
+    if pc == m_addr+16:
+      self.assertTrue(last == 1)
+      self.assertTrue(depth == 2)
+
+    if pc == m_addr+20:
+      self.assertTrue(last == 0)
+      self.assertTrue(depth == 1)
+
+    if pc == m_addr+24:
       self.assertTrue(last == 0)
       self.assertTrue(depth == 0)
 
