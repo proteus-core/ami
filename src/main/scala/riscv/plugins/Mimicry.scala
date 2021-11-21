@@ -17,6 +17,9 @@ class Mimicry() extends Plugin[Pipeline] {
     object GHOST extends PipelineData(Bool())   // Ghost instruction
     object MIMIC extends PipelineData(Bool())   // Always mimic
     object EXECUTE extends PipelineData(Bool()) // Always execute
+
+    object CONDITIONAL extends PipelineData(Bool()) // Conditional Mimicry (CM)
+    object CONDITION extends PipelineData(Bool())   // CM condition
   }
 
   // machine mimicry mode status (mmimstat) CSR
@@ -57,7 +60,10 @@ class Mimicry() extends Plugin[Pipeline] {
       config.addDefault(Map(
         Data.GHOST -> False,
         Data.MIMIC -> False,
-        Data.EXECUTE -> False
+        Data.EXECUTE -> False,
+
+        Data.CONDITIONAL -> False,
+        Data.CONDITION -> False
       ))
 
       val stage = pipeline.retirementStage
@@ -72,6 +78,21 @@ class Mimicry() extends Plugin[Pipeline] {
           }
           result = ir | 3
         }
+        
+        when (   stage.value(Data.GHOST)
+              || stage.value(Data.MIMIC)
+              || stage.value(Data.EXECUTE)) {
+          // TODO: Create jumpservice method to retreive the following ?
+          when (   (result === Opcodes.BEQ)
+                || (result === Opcodes.BNE)
+                || (result === Opcodes.BLT) 
+                || (result === Opcodes.BGE)
+                || (result === Opcodes.BLTU)
+                || (result === Opcodes.BGEU) ) {
+            stage.output(Data.CONDITIONAL) := True
+          }
+        }
+        
         result
       })
     }
@@ -91,6 +112,12 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_MIME) := mimstatCurrent(CSR_MIMSTAT_PMIME)
           mimstatNew(CSR_MIMSTAT_PMIME) := False
         case JumpType.Normal =>
+          when (   stage.value(Data.GHOST)
+                || stage.value(Data.MIMIC)
+                || stage.value(Data.EXECUTE)) {
+            stage.output(Data.CONDITION) := True
+            pipeline.getService[JumpService].disableJump(stage)
+          }
       }
 
       mimstat.write(mimstatNew)
@@ -110,7 +137,11 @@ class Mimicry() extends Plugin[Pipeline] {
       val mimstat = slave(new CsrIo)
       val mime = mimstat.read()(CSR_MIMSTAT_MIME)
 
-      when (!value(Data.EXECUTE)) {
+      // TODO: check arbitration logic ?
+
+      when (value(Data.CONDITIONAL)) {
+        // TODO
+      } elsewhen (!value(Data.EXECUTE)) {
         when (   value(Data.MIMIC)
               || (mime && (!value(Data.GHOST)))
               || (!mime && (value(Data.GHOST)))) {
