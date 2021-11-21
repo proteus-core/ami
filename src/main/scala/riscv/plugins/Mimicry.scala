@@ -11,9 +11,7 @@ class Mimicry() extends Plugin[Pipeline] {
   private val CSR_MMIMSTAT       = 0x7FF // mmimstat identifier
   private val CSR_MIMSTAT_MIME   = 0     // mimicry mode enabled (mime)
   private val CSR_MIMSTAT_PMIME  = 1     // previous mime (pmime)
-  private val CSR_MIMSTAT_LAST   = 2     // last requested mime
-  private val CSR_MIMSTAT_INVERT = 3     // apply inversion of last requested
-  private val CSR_MIMSTAT_DEPTH  = (31 downto 4)  // activation nesting level
+  private val CSR_MIMSTAT_DEPTH  = (31 downto 2)  // activation nesting level
 
   private object Data {
     object GHOST extends PipelineData(Bool())   // Ghost instruction
@@ -25,39 +23,29 @@ class Mimicry() extends Plugin[Pipeline] {
   private class Mmimstat(implicit config: Config) extends Csr {
     val mime   = Reg(Bool).init(False)
     val pmime  = Reg(Bool).init(False)
-    val last   = Reg(Bool).init(False)
-    val invert = False
     val depth  = Reg(UInt(CSR_MIMSTAT_DEPTH.length bits)).init(0)
 
-    val mmimstat = depth ## invert ## last ## pmime ## mime
+    val mmimstat = depth ## pmime ## mime
 
     override def read(): UInt = mmimstat.asUInt
 
     override def write(value: UInt): Unit = {
       mime := value(CSR_MIMSTAT_MIME)
       pmime := value(CSR_MIMSTAT_PMIME)
-      last := value(CSR_MIMSTAT_LAST)
       depth := value(CSR_MIMSTAT_DEPTH)
     }
 
-    def doSwWrite(value: UInt): Unit = {
-      last := value.lsb
-      when (value.lsb) {
+    override def swWrite(value: UInt): Unit = {
+      when (value(CSR_MIMSTAT_MIME)) {
         mime := True
         depth := depth + 1
       } otherwise {
-        when (depth === 1) {
-          mime := False
+        when (depth > 0) {
+          when (depth === 1) {
+            mime := False
+          }
+          depth := depth - 1  // TODO: assert depth > 0
         }
-        depth := depth - 1   // TODO: assert depth > 0
-      }
-    }
-
-    override def swWrite(value: UInt): Unit = {
-      when (value(CSR_MIMSTAT_INVERT)) {
-        doSwWrite(U(!last, config.xlen bits))
-      } otherwise {
-        doSwWrite(value)
       }
     }
   }
@@ -103,12 +91,6 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_MIME) := mimstatCurrent(CSR_MIMSTAT_PMIME)
           mimstatNew(CSR_MIMSTAT_PMIME) := False
         case JumpType.Normal =>
-          when (stage.value(Data.MIMIC)) {
-            val js = pipeline.getService[JumpService]
-            // Register branch outcome and fall through
-            mimstatNew(CSR_MIMSTAT_LAST) := js.jumpRequested(stage)
-            js.disableJump(stage)
-          }
       }
 
       mimstat.write(mimstatNew)
