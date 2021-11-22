@@ -96,24 +96,34 @@ class Mimicry() extends Plugin[Pipeline] {
       val stage = pipeline.retirementStage
 
       config.setIrMapper((stage, ir) => {
-        var result = ir
+        var result = ir | 3
+
         when (ir =/= 0) {
           switch (ir(1 downto 0)) {
-            is(0) { stage.output(Data.GHOST)   := True }
-            is(1) { stage.output(Data.MIMIC)   := True }
-            is(2) { stage.output(Data.EXECUTE) := True }
+            is(0) { 
+              when (isConditional(result)) {
+                stage.output(Data.INVERT) := True
+              } otherwise {
+                stage.output(Data.GHOST) := True 
+              }
+            }
+            is(1) { 
+              when (isConditional(result)) {
+                stage.output(Data.ACTIVATE) := True
+              } otherwise {
+                stage.output(Data.MIMIC) := True 
+              }
+            }
+            is(2) { 
+              when (isConditional(result)) {
+                stage.output(Data.DEACTIVATE) := True
+              } otherwise {
+                stage.output(Data.EXECUTE) := True 
+              }
+            }
           }
-          result = ir | 3
         }
 
-        when (inMimicryExecutionMode(stage) && isConditional(result)) {
-          // Map the previous values to more meaningfull ones in the context of
-          // conditional mimicry
-          stage.output(Data.ACTIVATE) := stage.value(Data.MIMIC)
-          stage.output(Data.INVERT) := stage.value(Data.GHOST)
-          stage.output(Data.DEACTIVATE) := stage.value(Data.EXECUTE)
-        }
-        
         result
       })
     }
@@ -133,7 +143,7 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_MIME) := mimstatCurrent(CSR_MIMSTAT_PMIME)
           mimstatNew(CSR_MIMSTAT_PMIME) := False
         case JumpType.Normal =>
-          when (inMimicryExecutionMode(stage)) {
+          when (inConditionalMimicry(stage)) {
             stage.output(Data.OUTCOME) := True
             pipeline.getService[JumpService].disableJump(stage)
           }
@@ -163,11 +173,25 @@ class Mimicry() extends Plugin[Pipeline] {
         val depth = mimstatCurrent(CSR_MIMSTAT_DEPTH)
         mimstatNew := mimstatCurrent
 
+        // TODO: How to avoid duplication with mimstat.swWrite ?
         when (value(Data.ACTIVATE)) {
           when (value(Data.OUTCOME)) {
-            // TODO: How to avoid duplication with mimstat.swWrite ?
             mimstatNew(CSR_MIMSTAT_MIME) := True
             mimstatNew(CSR_MIMSTAT_DEPTH) := depth + 1
+          }
+        } elsewhen (value(Data.INVERT)) {
+          when (value(Data.OUTCOME)) {
+            mimstatNew(CSR_MIMSTAT_MIME) := True
+            mimstatNew(CSR_MIMSTAT_DEPTH) := depth + 1
+          } otherwise {
+            mimstatNew(CSR_MIMSTAT_MIME) := False
+            mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1
+          }
+        } otherwise {
+          // TODO: assert value(Data.DEACTIVATE)
+          when (!value(Data.OUTCOME)) {
+            mimstatNew(CSR_MIMSTAT_MIME) := False
+            mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1 // TODO: assert depth > 0
           }
         }
 

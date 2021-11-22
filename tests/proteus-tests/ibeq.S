@@ -1,8 +1,8 @@
 #*****************************************************************************
-# abeq.S
+# ibeq.S
 #-----------------------------------------------------------------------------
 #
-# Test a.beq instruction
+# Test i.beq instruction
 #
 
 #include "riscv_test.h"
@@ -12,14 +12,15 @@ RVTEST_CODE_BEGIN
 
   li x5, 42 
 
+  MIMICRY_EMM
   RVTEST_MARK_NEXT
-  a.beq x0, x0, label
+  i.beq x0, x0, label
   nop
 label:
   nop
 
   // TODO: Also test when outcome is false 
-  //     a.beq x0, x5, label
+  //     i.beq x0, x5, label
 
   TEST_PASSFAIL
 
