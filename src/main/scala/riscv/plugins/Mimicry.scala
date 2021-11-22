@@ -82,6 +82,9 @@ class Mimicry() extends Plugin[Pipeline] {
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
+        Data.ISJUMP  -> False,
+
+        // Mimic execution
         Data.GHOST   -> False,
         Data.MIMIC   -> False,
         Data.EXECUTE -> False,
@@ -126,6 +129,14 @@ class Mimicry() extends Plugin[Pipeline] {
 
         result
       })
+
+      config.addDecoding(Opcodes.JAL, InstructionType.J, Map(
+        Data.ISJUMP -> True,
+      ))
+
+      config.addDecoding(Opcodes.JALR, InstructionType.I, Map(
+        Data.ISJUMP -> True,
+      ))
     }
 
     pipeline.getService[JumpService].onJump { (stage, _, _, jumpType) =>
@@ -196,7 +207,16 @@ class Mimicry() extends Plugin[Pipeline] {
         }
 
         mimstat.write(mimstatNew)
-      } elsewhen (!value(Data.EXECUTE)) {
+      } elsewhen (value(Data.ISJUMP) && value(Data.MIMIC)) {
+        // TODO: When this is an other region
+        //         - Activate mimicry mode
+        //         - Register return address
+        //         - in onjump observer, deactivate mimicry mode when
+        //                - instruction address == registered address
+        //                - activation counter is zero
+         
+      }
+      elsewhen (!value(Data.EXECUTE)) {
         val mime = mimstat.read()(CSR_MIMSTAT_MIME)
         when (   value(Data.MIMIC)
               || (mime && (!value(Data.GHOST)))
