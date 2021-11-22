@@ -53,6 +53,21 @@ class Mimicry() extends Plugin[Pipeline] {
     }
   }
 
+  def inMimicryExecutionMode(stage: Stage): Bool = {
+    stage.value(Data.GHOST)   ||
+    stage.value(Data.MIMIC)   ||
+    stage.value(Data.EXECUTE)
+  }
+
+  def isConditional(ir: UInt): Bool = {
+    (ir === Opcodes.BEQ)  ||
+    (ir === Opcodes.BNE)  ||
+    (ir === Opcodes.BLT)  ||
+    (ir === Opcodes.BGE)  ||
+    (ir === Opcodes.BLTU) ||
+    (ir === Opcodes.BGEU)
+  }
+
   override def setup(): Unit = {
     pipeline.getService[CsrService].registerCsr(CSR_MMIMSTAT, new Mmimstat)
 
@@ -78,20 +93,9 @@ class Mimicry() extends Plugin[Pipeline] {
           }
           result = ir | 3
         }
-        
-        when (   stage.value(Data.GHOST)
-              || stage.value(Data.MIMIC)
-              || stage.value(Data.EXECUTE)) {
-          // TODO: Create jumpservice method to retreive the following ?
-          when (   (result === Opcodes.BEQ)
-                || (result === Opcodes.BNE)
-                || (result === Opcodes.BLT) 
-                || (result === Opcodes.BGE)
-                || (result === Opcodes.BLTU)
-                || (result === Opcodes.BGEU) ) {
-            stage.output(Data.CONDITIONAL) := True
-          }
-        }
+
+        stage.output(Data.CONDITIONAL) := 
+                      inMimicryExecutionMode(stage) && isConditional(result)
         
         result
       })
@@ -112,9 +116,7 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_MIME) := mimstatCurrent(CSR_MIMSTAT_PMIME)
           mimstatNew(CSR_MIMSTAT_PMIME) := False
         case JumpType.Normal =>
-          when (   stage.value(Data.GHOST)
-                || stage.value(Data.MIMIC)
-                || stage.value(Data.EXECUTE)) {
+          when (inMimicryExecutionMode(stage)) {
             stage.output(Data.CONDITION) := True
             pipeline.getService[JumpService].disableJump(stage)
           }
