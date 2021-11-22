@@ -18,8 +18,11 @@ class Mimicry() extends Plugin[Pipeline] {
     object MIMIC extends PipelineData(Bool())   // Always mimic
     object EXECUTE extends PipelineData(Bool()) // Always execute
 
-    object CONDITIONAL extends PipelineData(Bool()) // Conditional Mimicry (CM)
-    object CONDITION extends PipelineData(Bool())   // CM condition
+    object ACTIVATE extends PipelineData(Bool())   // Conditional mimciry (CM)
+    object INVERT extends PipelineData(Bool())     // Conditional mimicry (CM)
+    object DEACTIVATE extends PipelineData(Bool()) // Conditional mimicry (CM)
+
+    object OUTCOME extends PipelineData(Bool())   // CM predicate outcome
   }
 
   // machine mimicry mode status (mmimstat) CSR
@@ -59,6 +62,12 @@ class Mimicry() extends Plugin[Pipeline] {
     stage.value(Data.EXECUTE)
   }
 
+  def inConditionalMimicry(stage: Stage): Bool = {
+    stage.value(Data.ACTIVATE)   ||
+    stage.value(Data.INVERT)     ||
+    stage.value(Data.DEACTIVATE)
+  }
+
   def isConditional(ir: UInt): Bool = {
     (ir === Opcodes.BEQ)  ||
     (ir === Opcodes.BNE)  ||
@@ -73,12 +82,15 @@ class Mimicry() extends Plugin[Pipeline] {
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
-        Data.GHOST -> False,
-        Data.MIMIC -> False,
+        Data.GHOST   -> False,
+        Data.MIMIC   -> False,
         Data.EXECUTE -> False,
 
-        Data.CONDITIONAL -> False,
-        Data.CONDITION -> False
+        // Conditional mimicry
+        Data.OUTCOME    -> False,
+        Data.ACTIVATE   -> False,
+        Data.INVERT     -> False,
+        Data.DEACTIVATE -> False
       ))
 
       val stage = pipeline.retirementStage
@@ -94,8 +106,13 @@ class Mimicry() extends Plugin[Pipeline] {
           result = ir | 3
         }
 
-        stage.output(Data.CONDITIONAL) := 
-                      inMimicryExecutionMode(stage) && isConditional(result)
+        when (inMimicryExecutionMode(stage) && isConditional(result)) {
+          // Map the previous values to more meaningfull ones in the context of
+          // conditional mimicry
+          stage.output(Data.ACTIVATE) := stage.value(Data.MIMIC)
+          stage.output(Data.INVERT) := stage.value(Data.GHOST)
+          stage.output(Data.DEACTIVATE) := stage.value(Data.EXECUTE)
+        }
         
         result
       })
@@ -117,7 +134,7 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_PMIME) := False
         case JumpType.Normal =>
           when (inMimicryExecutionMode(stage)) {
-            stage.output(Data.CONDITION) := True
+            stage.output(Data.OUTCOME) := True
             pipeline.getService[JumpService].disableJump(stage)
           }
       }
@@ -137,13 +154,26 @@ class Mimicry() extends Plugin[Pipeline] {
       import stage._
 
       val mimstat = slave(new CsrIo)
-      val mime = mimstat.read()(CSR_MIMSTAT_MIME)
 
       // TODO: check arbitration logic ?
 
-      when (value(Data.CONDITIONAL)) {
-        // TODO
+      when (inConditionalMimicry(stage)) {
+        val mimstatCurrent = mimstat.read()
+        val mimstatNew = UInt(config.xlen bits)
+        val depth = mimstatCurrent(CSR_MIMSTAT_DEPTH)
+        mimstatNew := mimstatCurrent
+
+        when (value(Data.ACTIVATE)) {
+          when (value(Data.OUTCOME)) {
+            // TODO: How to avoid duplication with mimstat.swWrite ?
+            mimstatNew(CSR_MIMSTAT_MIME) := True
+            mimstatNew(CSR_MIMSTAT_DEPTH) := depth + 1
+          }
+        }
+
+        mimstat.write(mimstatNew)
       } elsewhen (!value(Data.EXECUTE)) {
+        val mime = mimstat.read()(CSR_MIMSTAT_MIME)
         when (   value(Data.MIMIC)
               || (mime && (!value(Data.GHOST)))
               || (!mime && (value(Data.GHOST)))) {
