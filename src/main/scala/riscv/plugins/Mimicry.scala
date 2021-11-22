@@ -14,15 +14,18 @@ class Mimicry() extends Plugin[Pipeline] {
   private val CSR_MIMSTAT_DEPTH  = (31 downto 2)  // activation nesting level
 
   private object Data {
+    object ISJUMP extends PipelineData(Bool())
+    object OUTCOME extends PipelineData(Bool()) // Outcome of branch predicate
+
+    // Mimic execution
     object GHOST extends PipelineData(Bool())   // Ghost instruction
     object MIMIC extends PipelineData(Bool())   // Always mimic
     object EXECUTE extends PipelineData(Bool()) // Always execute
 
-    object ACTIVATE extends PipelineData(Bool())   // Conditional mimciry (CM)
-    object INVERT extends PipelineData(Bool())     // Conditional mimicry (CM)
-    object DEACTIVATE extends PipelineData(Bool()) // Conditional mimicry (CM)
-
-    object OUTCOME extends PipelineData(Bool())   // CM predicate outcome
+    // Conditional mimicry (CM)
+    object ACTIVATE extends PipelineData(Bool())   // Activate conditionaly
+    object INVERT extends PipelineData(Bool())     // Activate or deactivate
+    object DEACTIVATE extends PipelineData(Bool()) // Deactivate conditionally
   }
 
   // machine mimicry mode status (mmimstat) CSR
@@ -77,20 +80,25 @@ class Mimicry() extends Plugin[Pipeline] {
     (ir === Opcodes.BGEU)
   }
 
+  def isJump(ir: UInt): Bool = {
+    (ir === Opcodes.JAL)  ||
+    (ir === Opcodes.JALR)
+  }
+
   override def setup(): Unit = {
     pipeline.getService[CsrService].registerCsr(CSR_MMIMSTAT, new Mmimstat)
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
         Data.ISJUMP  -> False,
+        Data.OUTCOME -> False,
 
         // Mimic execution
         Data.GHOST   -> False,
         Data.MIMIC   -> False,
         Data.EXECUTE -> False,
 
-        // Conditional mimicry
-        Data.OUTCOME    -> False,
+        // Conditional mimicry (CM)
         Data.ACTIVATE   -> False,
         Data.INVERT     -> False,
         Data.DEACTIVATE -> False
@@ -127,16 +135,10 @@ class Mimicry() extends Plugin[Pipeline] {
           }
         }
 
+        stage.output(Data.ISJUMP) := isJump(result)
+
         result
       })
-
-      config.addDecoding(Opcodes.JAL, InstructionType.J, Map(
-        Data.ISJUMP -> True,
-      ))
-
-      config.addDecoding(Opcodes.JALR, InstructionType.I, Map(
-        Data.ISJUMP -> True,
-      ))
     }
 
     pipeline.getService[JumpService].onJump { (stage, _, _, jumpType) =>
@@ -155,8 +157,8 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_PMIME) := False
         case JumpType.Normal =>
           when (inConditionalMimicry(stage)) {
-            stage.output(Data.OUTCOME) := True
             pipeline.getService[JumpService].disableJump(stage)
+            stage.output(Data.OUTCOME) := True
           }
       }
 
@@ -178,6 +180,7 @@ class Mimicry() extends Plugin[Pipeline] {
 
       // TODO: check arbitration logic ?
 
+      // Case 1: Conditional mimicry
       when (inConditionalMimicry(stage)) {
         val mimstatCurrent = mimstat.read()
         val mimstatNew = UInt(config.xlen bits)
@@ -207,16 +210,18 @@ class Mimicry() extends Plugin[Pipeline] {
         }
 
         mimstat.write(mimstatNew)
-      } elsewhen (value(Data.ISJUMP) && value(Data.MIMIC)) {
+
+      // Case 2: Mimic jumps
+      } elsewhen (value(Data.MIMIC) && value(Data.ISJUMP)) {
         // TODO: When this is an other region
         //         - Activate mimicry mode
         //         - Register return address
         //         - in onjump observer, deactivate mimicry mode when
         //                - instruction address == registered address
         //                - activation counter is zero
-         
-      }
-      elsewhen (!value(Data.EXECUTE)) {
+
+      // Case 3: Mimic exeuction 
+      } elsewhen (!value(Data.EXECUTE)) {
         val mime = mimstat.read()(CSR_MIMSTAT_MIME)
         when (   value(Data.MIMIC)
               || (mime && (!value(Data.GHOST)))
