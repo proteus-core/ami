@@ -160,6 +160,13 @@ class Mimicry() extends Plugin[Pipeline] {
             pipeline.getService[JumpService].disableJump(stage)
             stage.output(Data.OUTCOME) := True
           }
+
+          when (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 1) {
+            // TODO: deactivate mimicry mode when we are exiting an outermost
+            //       region and the instruction address equals the
+            //       deactivation address
+            // TODO: This must be done in the writeback stage?
+          }
       }
 
       mimstat.write(mimstatNew)
@@ -177,15 +184,15 @@ class Mimicry() extends Plugin[Pipeline] {
       import stage._
 
       val mimstat = slave(new CsrIo)
+      val mimstatCurrent = mimstat.read()
+      val mimstatNew = UInt(config.xlen bits)
+      mimstatNew := mimstatCurrent
 
       // TODO: check arbitration logic ?
 
       // Case 1: Conditional mimicry
       when (inConditionalMimicry(stage)) {
-        val mimstatCurrent = mimstat.read()
-        val mimstatNew = UInt(config.xlen bits)
         val depth = mimstatCurrent(CSR_MIMSTAT_DEPTH)
-        mimstatNew := mimstatCurrent
 
         // TODO: How to avoid duplication with mimstat.swWrite ?
         when (value(Data.ACTIVATE)) {
@@ -211,14 +218,16 @@ class Mimicry() extends Plugin[Pipeline] {
 
         mimstat.write(mimstatNew)
 
-      // Case 2: Mimic jumps
+      // Case 2: Mimic jump
       } elsewhen (value(Data.MIMIC) && value(Data.ISJUMP)) {
-        // TODO: When this is an other region
-        //         - Activate mimicry mode
-        //         - Register return address
-        //         - in onjump observer, deactivate mimicry mode when
-        //                - instruction address == registered address
-        //                - activation counter is zero
+        when (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 0) {
+          // This is an outermost region entry
+          mimstatNew(CSR_MIMSTAT_MIME) := True
+          mimstatNew(CSR_MIMSTAT_DEPTH) := 1
+          // TODO: Register return address
+
+          mimstat.write(mimstatNew)
+        }
 
       // Case 3: Mimic exeuction 
       } elsewhen (!value(Data.EXECUTE)) {
