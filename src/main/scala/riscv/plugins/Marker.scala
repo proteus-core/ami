@@ -6,7 +6,7 @@ import spinal.core._
 class Marker() extends Plugin[Pipeline] {
 
   object Opcodes {
-    val MARK = M"00000000000000000000000000001011"
+    val MARK = M"-------------------------0001011"
   }
 
   object Data {

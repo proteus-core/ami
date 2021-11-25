@@ -60,16 +60,13 @@ start_tests:
     li tp, TESTDEV;                                                     \
     sw zero, 0(tp);
 
-#define RVTEST_MARK_NEXT                                                \
-    .word 0x0b
 
-#define MIMICRY_EMM                                                     \
-    csrsi 0x7ff, 1
+#define RVTEST_MARK_NEXT .word 0x0000000b
+#define RVTEST_MARK_ZERO .word 0x0000000b
+#define RVTEST_MARK_ONE  .word 0x0010000b
+#define RVTEST_MARK_TWO  .word 0x0020000b
 
-#define MIMICRY_DMM                                                     \
-    csrci 0x7ff, 1
-
-#define MIMICRY_INVERT                                                  \
-    csrsi 0x7ff, 8
+#define MIMICRY_EMM  csrsi 0x7ff, 1
+#define MIMICRY_DMM  csrci 0x7ff, 1
 
 #endif
