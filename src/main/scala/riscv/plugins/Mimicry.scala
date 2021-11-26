@@ -8,10 +8,12 @@ class Mimicry() extends Plugin[Pipeline] {
 
   override def getImplementedExtensions = Seq('X')
 
-  private val CSR_MMIMSTAT       = 0x7FF // mmimstat identifier
+  private val CSR_MMIMSTAT       = 0x7FF // mmimstat CSR identifier
   private val CSR_MIMSTAT_MIME   = 0     // mimicry mode enabled (mime)
   private val CSR_MIMSTAT_PMIME  = 1     // previous mime (pmime)
   private val CSR_MIMSTAT_DEPTH  = (31 downto 2)  // activation nesting level
+
+  private val CSR_MMIMEXIT       = 0x7EF // mmimexit CSR identifier
 
   private object Data {
     object ISJUMP extends PipelineData(Bool())
@@ -28,7 +30,7 @@ class Mimicry() extends Plugin[Pipeline] {
     object DEACTIVATE extends PipelineData(Bool()) // Deactivate conditionally
   }
 
-  // machine mimicry mode status (mmimstat) CSR
+  // mmimstat CSR: machine mimicry mode status
   private class Mmimstat(implicit config: Config) extends Csr {
     val mime   = Reg(Bool).init(False)
     val pmime  = Reg(Bool).init(False)
@@ -59,6 +61,17 @@ class Mimicry() extends Plugin[Pipeline] {
     }
   }
 
+  // mmimexit CSR: machine mimicry mode exit address
+  private class Mmimexit(implicit config: Config) extends Csr {
+    val exit = Reg(UInt(config.xlen bits)).init(0)
+
+    override def read(): UInt = exit
+
+    override def write(value: UInt): Unit = {
+      exit := value
+    }
+  }
+
   def inMimicryExecutionMode(stage: Stage): Bool = {
     stage.value(Data.GHOST)   ||
     stage.value(Data.MIMIC)   ||
@@ -86,7 +99,9 @@ class Mimicry() extends Plugin[Pipeline] {
   }
 
   override def setup(): Unit = {
-    pipeline.getService[CsrService].registerCsr(CSR_MMIMSTAT, new Mmimstat)
+    val csrService = pipeline.getService[CsrService]
+    csrService.registerCsr(CSR_MMIMSTAT, new Mmimstat)
+    csrService.registerCsr(CSR_MMIMEXIT, new Mmimexit)
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
@@ -148,6 +163,8 @@ class Mimicry() extends Plugin[Pipeline] {
       val mimstatNew = UInt(config.xlen bits)
       mimstatNew := mimstatCurrent
 
+      val mimexit = Utils.outsideConditionScope(slave(new CsrIo))
+
       jumpType match {
         case JumpType.Trap =>
           mimstatNew(CSR_MIMSTAT_MIME) := False
@@ -165,6 +182,7 @@ class Mimicry() extends Plugin[Pipeline] {
             // TODO: deactivate mimicry mode when we are exiting an outermost
             //       region and the instruction address equals the
             //       deactivation address
+            // mimexit.read()
             // TODO: This must be done in the writeback stage?
           }
       }
@@ -172,7 +190,9 @@ class Mimicry() extends Plugin[Pipeline] {
       mimstat.write(mimstatNew)
       
       pipeline plug new Area {
-        mimstat <> pipeline.getService[CsrService].getCsr(CSR_MMIMSTAT)
+        val csrService = pipeline.getService[CsrService]
+        mimstat <> csrService.getCsr(CSR_MMIMSTAT)
+        mimexit <> csrService.getCsr(CSR_MMIMEXIT)
       }
     }
   }
@@ -187,6 +207,8 @@ class Mimicry() extends Plugin[Pipeline] {
       val mimstatCurrent = mimstat.read()
       val mimstatNew = UInt(config.xlen bits)
       mimstatNew := mimstatCurrent
+
+      val mimexit = slave(new CsrIo)
 
       // TODO: check arbitration logic ?
 
@@ -220,13 +242,13 @@ class Mimicry() extends Plugin[Pipeline] {
 
       // Case 2: Mimic jump
       } elsewhen (value(Data.MIMIC) && value(Data.ISJUMP)) {
+        // If this is an outermost region, activate mimicry mode and regsiter
+        // the address of the next instruction as the exit address
         when (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 0) {
-          // This is an outermost region entry
           mimstatNew(CSR_MIMSTAT_MIME) := True
           mimstatNew(CSR_MIMSTAT_DEPTH) := 1
-          // TODO: Register return address
 
-          mimstat.write(mimstatNew)
+          mimexit.write(U(0xbabe)) // TODO
         }
 
       // Case 3: Mimic exeuction 
@@ -241,7 +263,9 @@ class Mimicry() extends Plugin[Pipeline] {
     }
 
     pipeline plug new Area {
-      mimicryArea.mimstat <> pipeline.getService[CsrService].getCsr(CSR_MMIMSTAT)
+      val csrService = pipeline.getService[CsrService]
+      mimicryArea.mimstat <> csrService.getCsr(CSR_MMIMSTAT)
+      mimicryArea.mimexit <> csrService.getCsr(CSR_MMIMEXIT)
     }
   }
 }
