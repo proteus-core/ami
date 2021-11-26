@@ -5,9 +5,9 @@ import MimicryTest
 
 class misa(MimicryTest.MimicryTest):
 
-  def on_change_decode_pc(self, vcd, m_addr, t, pc):
+  def on_change_decode_pc(self, vcd, t, pc):
 
-    if pc == m_addr:
+    if pc == vcd.get_marker_addr():
       X = 23
       v = vcd.as_int(vcd.CSR.CsrFile_extensions, t) & (1 << X)
       self.assertTrue(v != 0)

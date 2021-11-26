@@ -3,6 +3,15 @@ import vcdvcd
 import util
 
 #############################################################################
+class Marker:
+
+  ###########################################################################
+  def __init__(self, epoch, addr, n):
+    self.epoch = epoch
+    self.addr  = addr
+    self.n     = n
+
+#############################################################################
 class ProteusVCD:
 
   ###########################################################################
@@ -42,24 +51,32 @@ class ProteusVCD:
     return util.NestedNamespace(signal_dict)
 
   ###########################################################################
-  def find_marker(self):
+  def locate_markers(self):
+    result = []  
     signal = self.PL.decode_out_MARK
     for t, v in [(t, int(v, 2)) for (t, v) in self.vcd[signal].tv]:
       if v == 1:
-        return t
-    return None
+        result.append(t)
+    return result
 
   ###########################################################################
   def init_marker_info(self):
-    # Get marker info
-    self.m_epoch = self.find_marker()
-    assert self.m_epoch, "Marker not found"
-    self.m_addr = self.as_int(self.PL.fetch_out_PC, self.m_epoch)
-    m_ir = self.as_bytes(self.PL.fetch_out_IR, self.m_epoch)
-    m_instr = util.disassemble(m_ir)
-    #assert m_instr == "addi t0,t0,1", "Unexpected instr: '%s'" % m_instr
-    print("MARKER: EPOCH=%d ADDR=%08x INSTR=%s" % \
-                                        (self.m_epoch, self.m_addr, m_instr))
+    self.markers = {}
+    l = self.locate_markers()
+    for t in l:
+      addr = self.as_int(self.PL.fetch_out_PC, t)
+      n = self.as_int(self.PL.decode_out_IMM, t)
+      assert not n in self.markers, "Duplicate marker"
+      self.markers[n] = Marker(t, addr, n)
+
+  ###########################################################################
+  def get_marker(self, n=0):
+    assert n in self.markers, "No such marker: " % n
+    return self.markers[n]
+
+  ###########################################################################
+  def get_marker_addr(self, n=0):
+    return self.markers[n].addr
 
   ###########################################################################
   def signal(self, name):

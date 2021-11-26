@@ -5,13 +5,25 @@ import MimicryTest
 
 class mmaddi(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, m_addr, t, pc):
+  def on_change_writeback_pc(self, vcd, t, pc):
+
+    m_addr = vcd.get_marker_addr()
 
     x5 = vcd.x5(vcd.nextt(t))
     x6 = vcd.x6(vcd.nextt(t))
     x7 = vcd.x7(vcd.nextt(t))
 
-    if pc in (m_addr, m_addr+4, m_addr+8):
+    if pc == m_addr:
+      self.assertEqual(x5, 0)
+      self.assertEqual(x6, 0)
+      self.assertEqual(x7, 0)
+
+    if pc == m_addr+4:
+      self.assertEqual(x5, 0)
+      self.assertEqual(x6, 0)
+      self.assertEqual(x7, 0)
+
+    if pc == m_addr+8:
       self.assertEqual(x5, 0)
       self.assertEqual(x6, 0)
       self.assertEqual(x7, 0)

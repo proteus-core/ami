@@ -5,9 +5,9 @@ import MimicryTest
 
 class jemm(MimicryTest.MimicryTest):
 
-  def on_change_decode_pc(self, vcd, m_addr, t, pc):
+  def on_change_decode_pc(self, vcd, t, pc):
 
-    if pc == m_addr:
+    if pc == vcd.get_marker_addr():
       self.assertFalse(self.in_mm(vcd, vcd.nextt(t)))
 
 if __name__ == '__main__':

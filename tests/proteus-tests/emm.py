@@ -6,7 +6,7 @@ import MimicryTest
 class emm(MimicryTest.MimicryTest):
 
   """
-  def on_change_decode_pc(self, vcd, m_addr, t, pc):
+  def on_change_decode_pc(self, vcd, t, pc):
 
     if pc == m_addr:
       tn = vcd.nextt(t)
@@ -27,7 +27,10 @@ class emm(MimicryTest.MimicryTest):
       self.assertEqual(vcd.as_int(vcd.PL.memory_out_RD_TYPE, t), 2)
   """
 
-  def on_change_writeback_pc(self, vcd, m_addr, t, pc):
+  def on_change_writeback_pc(self, vcd, t, pc):
+
+    m_addr = vcd.get_marker_addr()
+
     if pc == m_addr+4:
       self.assertTrue(self.in_mm(vcd, t))
       self.assertEqual(vcd.as_int(vcd.PL.writeback_out_RD_TYPE, t), 0)

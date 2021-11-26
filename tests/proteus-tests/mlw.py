@@ -5,11 +5,16 @@ import MimicryTest
 
 class mlw(MimicryTest.MimicryTest):
 
-  def on_change_memory_pc(self, vcd, m_addr, t, pc):
+  def on_change_memory_pc(self, vcd, t, pc):
+
+    m_addr = vcd.get_marker_addr()
 
     x6 = vcd.x6(vcd.nextt(t))
 
-    if pc in (m_addr, m_addr+4):
+    if pc == m_addr:
+      self.assertEqual(x6, 0)
+
+    if pc == m_addr+4:
       self.assertEqual(x6, 0)
 
     if pc == m_addr + 12:
