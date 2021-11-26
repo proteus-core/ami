@@ -71,12 +71,12 @@ class ProteusVCD:
 
   ###########################################################################
   def get_marker(self, n=0):
-    assert n in self.markers, "No such marker: " % n
+    assert n in self.markers, "No such marker: %d" % n
     return self.markers[n]
 
   ###########################################################################
   def get_marker_addr(self, n=0):
-    return self.markers[n].addr
+    return self.get_marker(n).addr
 
   ###########################################################################
   def signal(self, name):
