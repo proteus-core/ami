@@ -248,7 +248,8 @@ class Mimicry() extends Plugin[Pipeline] {
           mimstatNew(CSR_MIMSTAT_MIME) := True
           mimstatNew(CSR_MIMSTAT_DEPTH) := 1
 
-          mimexit.write(U(0xbabe)) // TODO
+          mimstat.write(mimstatNew)
+          mimexit.write(value(pipeline.data.PC)+4)
         }
 
       // Case 3: Mimic exeuction 
