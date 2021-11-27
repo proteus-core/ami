@@ -212,9 +212,8 @@ class Mimicry() extends Plugin[Pipeline] {
       when (   (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 1)
             && (value(pipeline.data.PC) === mimexit.read()) ) {
         // TODO: How to avoid duplication with mimstat.swWrite ?
-        val depth = mimstatCurrent(CSR_MIMSTAT_DEPTH)
         mimstatNew(CSR_MIMSTAT_MIME) := False
-        mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1
+        mimstatNew(CSR_MIMSTAT_DEPTH) := 0
         mimstat.write(mimstatNew)
         mimexit.write(CSR_MIMEXIT_NONE)
 
