@@ -8,12 +8,13 @@ class Mimicry() extends Plugin[Pipeline] {
 
   override def getImplementedExtensions = Seq('X')
 
-  private val CSR_MMIMSTAT       = 0x7FF // mmimstat CSR identifier
-  private val CSR_MIMSTAT_MIME   = 0     // mimicry mode enabled (mime)
-  private val CSR_MIMSTAT_PMIME  = 1     // previous mime (pmime)
+  private val CSR_MMIMSTAT       = 0x7FF          // mmimstat CSR identifier
+  private val CSR_MIMSTAT_MIME   = 0              // mimicry mode enabled (mime)
+  private val CSR_MIMSTAT_PMIME  = 1              // previous mime (pmime)
   private val CSR_MIMSTAT_DEPTH  = (31 downto 2)  // activation nesting level
 
-  private val CSR_MMIMEXIT       = 0x7EF // mmimexit CSR identifier
+  private val CSR_MMIMEXIT       = 0x7EF      // mmimexit CSR identifier
+  private val CSR_MIMEXIT_NONE   = 0x7FFFFFFF // TODO: which value?
 
   private object Data {
     object ISJUMP extends PipelineData(Bool())
@@ -63,7 +64,8 @@ class Mimicry() extends Plugin[Pipeline] {
 
   // mmimexit CSR: machine mimicry mode exit address
   private class Mmimexit(implicit config: Config) extends Csr {
-    val exit = Reg(UInt(config.xlen bits)).init(0)
+
+    val exit = Reg(UInt(config.xlen bits)).init(CSR_MIMEXIT_NONE)
 
     override def read(): UInt = exit
 
@@ -177,14 +179,6 @@ class Mimicry() extends Plugin[Pipeline] {
             pipeline.getService[JumpService].disableJump(stage)
             stage.output(Data.OUTCOME) := True
           }
-
-          when (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 1) {
-            // TODO: deactivate mimicry mode when we are exiting an outermost
-            //       region and the instruction address equals the
-            //       deactivation address
-            // mimexit.read()
-            // TODO: This must be done in the writeback stage?
-          }
       }
 
       mimstat.write(mimstatNew)
@@ -211,6 +205,22 @@ class Mimicry() extends Plugin[Pipeline] {
       val mimexit = slave(new CsrIo)
 
       // TODO: check arbitration logic ?
+
+      // Deactivate mimicry mode when
+      //   - we are executing in an outermost region
+      //   - and the progam counter equals the exit address
+      when (   (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 1)
+            && (value(pipeline.data.PC) === mimexit.read()) ) {
+        // TODO: How to avoid duplication with mimstat.swWrite ?
+        val depth = mimstatCurrent(CSR_MIMSTAT_DEPTH)
+        mimstatNew(CSR_MIMSTAT_MIME) := False
+        mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1
+        mimstat.write(mimstatNew)
+        mimexit.write(CSR_MIMEXIT_NONE)
+
+        // TODO: - Code below should read from mimstatNew?
+        //       - Or always read from mimstatCurrent and update that one too?
+      }
 
       // Case 1: Conditional mimicry
       when (inConditionalMimicry(stage)) {
