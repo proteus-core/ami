@@ -3,7 +3,7 @@ import vcdvcd
 import util
 
 #############################################################################
-class Marker:
+class Mark:
 
   ###########################################################################
   def __init__(self, epoch, addr, n):
@@ -34,7 +34,7 @@ class ProteusVCD:
     if len(signals) > 0:
       assert set(signals) == set(self.vcd.signals), "Missing signals"
 
-    self.init_marker_info()
+    self.init_marks()
 
   ###########################################################################
   def build_signal_namespace(self):
@@ -51,7 +51,7 @@ class ProteusVCD:
     return util.NestedNamespace(signal_dict)
 
   ###########################################################################
-  def locate_markers(self):
+  def locate_marks(self):
     result = []  
     signal = self.PL.decode_out_MARK
     for t, v in [(t, int(v, 2)) for (t, v) in self.vcd[signal].tv]:
@@ -60,23 +60,23 @@ class ProteusVCD:
     return result
 
   ###########################################################################
-  def init_marker_info(self):
-    self.markers = {}
-    l = self.locate_markers()
+  def init_marks(self):
+    self.marks = {}
+    l = self.locate_marks()
     for t in l:
       addr = self.as_int(self.PL.fetch_out_PC, t)
       n = self.as_int(self.PL.decode_out_IMM, t)
-      assert not n in self.markers, "Duplicate marker"
-      self.markers[n] = Marker(t, addr, n)
+      assert not n in self.marks, "Duplicate mark"
+      self.marks[n] = Mark(t, addr, n)
 
   ###########################################################################
-  def get_marker(self, n=0):
-    assert n in self.markers, "No such marker: %d" % n
-    return self.markers[n]
+  def get_mark(self, n=0):
+    assert n in self.marks, "No such mark: %d" % n
+    return self.marks[n]
 
   ###########################################################################
-  def get_marker_addr(self, n=0):
-    return self.get_marker(n).addr
+  def get_marked_instr_addr(self, n=0):
+    return self.get_mark(n).addr
 
   ###########################################################################
   def signal(self, name):

@@ -9,7 +9,7 @@ class abeq(MimicryTest.MimicryTest):
 
     depth = vcd.as_int(vcd.CSR.CsrFile_depth, t)
 
-    if pc == vcd.get_marker_addr()+4:
+    if pc == vcd.get_marked_instr_addr()+4:
       self.assertTrue(self.in_mm(vcd, t))
       self.assertEqual(depth, 1)
 

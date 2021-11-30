@@ -29,7 +29,7 @@ class emm(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, t, pc):
 
-    m_addr = vcd.get_marker_addr()
+    m_addr = vcd.get_marked_instr_addr()
 
     if pc == m_addr+4:
       self.assertTrue(self.in_mm(vcd, t))

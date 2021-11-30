@@ -9,7 +9,7 @@ class ibeq(MimicryTest.MimicryTest):
 
     depth = vcd.as_int(vcd.CSR.CsrFile_depth, t)
 
-    if pc == vcd.get_marker_addr():
+    if pc == vcd.get_marked_instr_addr():
       pass
 
 if __name__ == '__main__':

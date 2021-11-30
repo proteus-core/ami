@@ -109,8 +109,8 @@ def llvm_disassemble_mc(bytez):
 def disassemble(bytez):
   assert len(bytez) == 4
   #esult = gnu_disassemble(bytez)
-  result = llvm_disassemble(bytez)
-  #esult = llvm_disassemble_mc(bytez)
+  #esult = llvm_disassemble(bytez)
+  result = llvm_disassemble_mc(bytez)
   if result.find("unknown") > 0:
     result = bytez.hex()
   return result
