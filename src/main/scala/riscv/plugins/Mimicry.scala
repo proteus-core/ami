@@ -238,7 +238,7 @@ class Mimicry() extends Plugin[Pipeline] {
           }
         } otherwise {
           // TODO: assert value(Data.DEACTIVATE)
-          when (!value(Data.OUTCOME)) {
+          when (value(Data.OUTCOME)) {
             mimstatNew(CSR_MIMSTAT_MIME) := False
             mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1 // TODO: assert depth > 0
           }

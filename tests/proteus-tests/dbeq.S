@@ -10,18 +10,17 @@
 
 RVTEST_CODE_BEGIN
 
-  li x5, 42 
-
   MIMICRY_EMM
-  RVTEST_MARK
-  d.beq x0, x0, label
-  nop
-label:
-  nop
+  RVTEST_MARK_ZERO
+  d.beq x0, x0, 1f
 
-  // TODO: Also test when outcome is false 
-  //     d.beq x0, x5, label
+1:
+  MIMICRY_EMM
+  li x5, 42 
+  RVTEST_MARK_ONE
+  d.beq x0, x5, 2f
 
+2:
   TEST_PASSFAIL
 
 RVTEST_CODE_END
