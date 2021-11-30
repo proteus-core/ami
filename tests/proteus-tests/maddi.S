@@ -17,7 +17,7 @@ RVTEST_CODE_BEGIN
   li x6, 0
   li x7, 0
   
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   m.addi x5, x5, 1     # assert x5 == 0
   m.addi x6, x6, 1     # assert x6 == 0
   

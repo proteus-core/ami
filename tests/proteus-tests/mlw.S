@@ -14,7 +14,7 @@ RVTEST_CODE_BEGIN
   li x6, 0
 
   MIMICRY_EMM
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   lw x6, 0(x5)  # assert x6 == 0
   MIMICRY_DMM
   lw x6, 0(x5)  # assert x6 == 0xdeadbeef

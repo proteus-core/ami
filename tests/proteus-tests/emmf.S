@@ -13,7 +13,7 @@ RVTEST_CODE_BEGIN
 
   li x5, -1
   MIMICRY_EMM
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   sw zero, 0(x5)
   nop
   MIMICRY_DMM

@@ -19,7 +19,7 @@ RVTEST_CODE_BEGIN
   li x7, 0
   
   MIMICRY_EMM
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   addi x5, x5, 1     # assert x5 == 0
   addi x6, x6, 1     # assert x6 == 0
   

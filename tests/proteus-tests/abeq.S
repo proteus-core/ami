@@ -12,7 +12,7 @@ RVTEST_CODE_BEGIN
 
   li x5, 42 
 
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   a.beq x0, x0, label
   nop
 label:

@@ -13,7 +13,7 @@ RVTEST_CODE_BEGIN
   li x5, 42 
 
   MIMICRY_EMM
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   i.beq x0, x0, label
   nop
 label:

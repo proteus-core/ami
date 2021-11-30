@@ -14,7 +14,7 @@ RVTEST_CODE_BEGIN
   li x5, 0
   
   MIMICRY_EMM
-  RVTEST_MARK_NEXT
+  RVTEST_MARK
   p.addi x5, x5, 1   # assert x5 == 1
   MIMICRY_DMM
   p.addi x5, x5, 1   # assert x5 == 2 
