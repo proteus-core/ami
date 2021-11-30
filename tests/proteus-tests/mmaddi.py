@@ -7,7 +7,7 @@ class mmaddi(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, t, pc):
 
-    m_addr = vcd.get_marked_instr_addr()
+    m_addr = vcd.get_addr_of_marked_instr()
 
     x5 = vcd.x5(vcd.nextt(t))
     x6 = vcd.x6(vcd.nextt(t))

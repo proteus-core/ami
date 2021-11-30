@@ -9,8 +9,11 @@ class mj(MimicryTest.MimicryTest):
 
     tn = vcd.nextt(t)
 
-    mark1 = vcd.get_marked_instr_addr(0x01)
-    mark2 = vcd.get_marked_instr_addr(0x02)
+    mark1   = vcd.get_addr_of_marked_instr(0x01)
+    mark2   = vcd.get_addr_of_marked_instr(0x02)
+    mark11  = vcd.get_addr_of_marked_instr(0x11)
+    mark22  = vcd.get_addr_of_marked_instr(0x22)
+    mark222 = vcd.get_addr_of_marked_instr(0x222)
 
     is_mimic = vcd.as_int(vcd.WB.value_MIMIC, t) == 1
     is_jump = vcd.as_int(vcd.WB.value_ISJUMP, t) == 1
@@ -39,17 +42,17 @@ class mj(MimicryTest.MimicryTest):
       self.assertEqual(depthn, 1)
       self.assertEqual(exitn, mark2+4)
 
-    if pc == vcd.get_marked_instr_addr(0x11):
+    if pc == mark11:
       self.assertTrue(self.in_mm(vcd, t))
       self.assertEqual(depth, 1)
       self.assertEqual(exit, mark1+4)
 
-    if pc == vcd.get_marked_instr_addr(0x22):
+    if pc == mark22:
       self.assertTrue(self.in_mm(vcd, t))
       self.assertEqual(depth, 1)
       self.assertEqual(exit, mark2+4)
       
-    if pc == vcd.get_marked_instr_addr(0x222):
+    if pc == mark222:
       self.assertTrue(self.in_mm(vcd, t))
       self.assertEqual(depth, 1)
       self.assertEqual(exit, mark2+4)

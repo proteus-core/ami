@@ -9,7 +9,7 @@ class femm(MimicryTest.MimicryTest):
 
     # TODO:
     pass
-    #if pc == vcd.get_marked_instr_addr():
+    #if pc == vcd.get_addr_of_marked_instr():
       #self.assertTrue(self.in_mm(vcd, self.nextt(t)))
 
 if __name__ == '__main__':

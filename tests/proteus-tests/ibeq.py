@@ -7,8 +7,8 @@ class ibeq(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, t, pc):
 
-    mark0 = vcd.get_marked_instr_addr(0x00)
-    mark1 = vcd.get_marked_instr_addr(0x01)
+    mark0 = vcd.get_addr_of_marked_instr(0x00)
+    mark1 = vcd.get_addr_of_marked_instr(0x01)
 
     is_invert = vcd.as_int(vcd.WB.value_INVERT, t) == 1
     is_taken = vcd.as_int(vcd.WB.value_OUTCOME, t) == 1

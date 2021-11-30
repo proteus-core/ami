@@ -7,7 +7,7 @@ class gaddi(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, t, pc):
 
-    m_addr = vcd.get_marked_instr_addr()
+    m_addr = vcd.get_addr_of_marked_instr()
     tn = vcd.nextt(t)
 
     is_ghost = vcd.as_int(vcd.WB.value_GHOST, t) == 1

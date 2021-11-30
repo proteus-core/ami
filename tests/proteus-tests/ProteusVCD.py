@@ -67,17 +67,18 @@ class ProteusVCD:
     for t in l:
       addr = self.as_int(self.PL.fetch_out_PC, t)
       n = self.as_int(self.PL.decode_out_IMM, t)
-      assert not n in self.marks, "Duplicate mark %d" % n
-      self.marks[n] = Mark(t, addr, n)
+      if not n in self.marks:
+        self.marks[n] = []
+      self.marks[n].append(Mark(t, addr, n))
 
   ###########################################################################
-  def get_mark(self, n=0):
-    assert n in self.marks, "No such mark: %d" % n
-    return self.marks[n]
+  def get_mark(self, mark=0):
+    assert mark in self.marks, "No such mark: %d" % mark 
+    return self.marks[mark]
 
   ###########################################################################
-  def get_marked_instr_addr(self, n=0):
-    return self.get_mark(n).addr
+  def get_addr_of_marked_instr(self, mark=0):
+    return self.get_mark(mark)[0].addr
 
   ###########################################################################
   def signal(self, name):
