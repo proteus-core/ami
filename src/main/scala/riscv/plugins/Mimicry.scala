@@ -165,8 +165,6 @@ class Mimicry() extends Plugin[Pipeline] {
       val mimstatNew = UInt(config.xlen bits)
       mimstatNew := mimstatCurrent
 
-      val mimexit = Utils.outsideConditionScope(slave(new CsrIo))
-
       jumpType match {
         case JumpType.Trap =>
           mimstatNew(CSR_MIMSTAT_MIME) := False
@@ -186,7 +184,6 @@ class Mimicry() extends Plugin[Pipeline] {
       pipeline plug new Area {
         val csrService = pipeline.getService[CsrService]
         mimstat <> csrService.getCsr(CSR_MMIMSTAT)
-        mimexit <> csrService.getCsr(CSR_MMIMEXIT)
       }
     }
   }
