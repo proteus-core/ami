@@ -21,9 +21,9 @@ class Mimicry() extends Plugin[Pipeline] {
     object OUTCOME extends PipelineData(Bool()) // Outcome of branch predicate
 
     // Mimic execution
-    object GHOST extends PipelineData(Bool())   // Ghost instruction
-    object MIMIC extends PipelineData(Bool())   // Always mimic
-    object EXECUTE extends PipelineData(Bool()) // Always execute
+    object GHOST extends PipelineData(Bool())      // Ghost instruction
+    object MIMIC extends PipelineData(Bool())      // Always mimic
+    object PERSISTENT extends PipelineData(Bool()) // Always execute
 
     // Conditional mimicry (CM)
     object ACTIVATE extends PipelineData(Bool())   // Activate conditionaly
@@ -77,7 +77,7 @@ class Mimicry() extends Plugin[Pipeline] {
   def inMimicryExecutionMode(stage: Stage): Bool = {
     stage.value(Data.GHOST)   ||
     stage.value(Data.MIMIC)   ||
-    stage.value(Data.EXECUTE)
+    stage.value(Data.PERSISTENT)
   }
 
   def inConditionalMimicry(stage: Stage): Bool = {
@@ -111,9 +111,9 @@ class Mimicry() extends Plugin[Pipeline] {
         Data.OUTCOME -> False,
 
         // Mimic execution
-        Data.GHOST   -> False,
-        Data.MIMIC   -> False,
-        Data.EXECUTE -> False,
+        Data.GHOST      -> False,
+        Data.MIMIC      -> False,
+        Data.PERSISTENT -> False,
 
         // Conditional mimicry (CM)
         Data.ACTIVATE   -> False,
@@ -146,7 +146,7 @@ class Mimicry() extends Plugin[Pipeline] {
               when (isConditional(result)) {
                 stage.output(Data.DEACTIVATE) := True
               } otherwise {
-                stage.output(Data.EXECUTE) := True 
+                stage.output(Data.PERSISTENT) := True 
               }
             }
           }
@@ -262,7 +262,7 @@ class Mimicry() extends Plugin[Pipeline] {
         }
 
       // Case 3: Mimic exeuction 
-      } elsewhen (!value(Data.EXECUTE)) {
+      } elsewhen (!value(Data.PERSISTENT)) {
         val mime = mimstat.read()(CSR_MIMSTAT_MIME)
         when (   value(Data.MIMIC)
               || (mime && (!value(Data.GHOST)))
