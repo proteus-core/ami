@@ -56,7 +56,8 @@ class ProteusVCD:
     signal = self.PL.decode_out_MARK
     for t, v in [(t, int(v, 2)) for (t, v) in self.vcd[signal].tv]:
       if v == 1:
-        result.append(t)
+        if self.as_int(self.PL.decode_arbitration_isValid, t) == 1:
+          result.append(t)
     return result
 
   ###########################################################################
@@ -66,7 +67,7 @@ class ProteusVCD:
     for t in l:
       addr = self.as_int(self.PL.fetch_out_PC, t)
       n = self.as_int(self.PL.decode_out_IMM, t)
-      assert not n in self.marks, "Duplicate mark"
+      assert not n in self.marks, "Duplicate mark %d" % n
       self.marks[n] = Mark(t, addr, n)
 
   ###########################################################################
