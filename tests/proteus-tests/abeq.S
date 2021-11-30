@@ -12,14 +12,23 @@ RVTEST_CODE_BEGIN
 
   li x5, 42 
 
-  RVTEST_MARK
-  a.beq x0, x0, label
+  RVTEST_MARK_ZERO
+  a.beq x0, x0, 1f
   nop
-label:
+1:
   nop
 
-  // TODO: Also test when outcome is false 
-  //     a.beq x0, x5, label
+  RVTEST_MARK_ONE
+  a.beq x0, x5, 1f
+  nop
+1:
+  nop
+
+  RVTEST_MARK_TWO
+  a.beq x0, x0, 1f
+  nop
+1:
+  nop
 
   TEST_PASSFAIL
 
