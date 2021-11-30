@@ -7,10 +7,28 @@ class ite(MimicryTest.MimicryTest):
 
   def on_change_writeback_pc(self, vcd, t, pc):
 
-    depth = vcd.as_int(vcd.CSR.CsrFile_depth, t)
+    mark0 = vcd.get_marked_instr_addr(0x00)
+    mark1 = vcd.get_marked_instr_addr(0x01)
+    mark2 = vcd.get_marked_instr_addr(0x02)
+    mark3 = vcd.get_marked_instr_addr(0x03)
 
-    if pc == vcd.get_marked_instr_addr():
-      pass
+    # Mark 0
+    if pc == mark0  : self.assertTrue(self.in_mm(vcd, t))
+    if pc == mark0+8: self.assertFalse(self.in_mm(vcd, t))
+
+    # Mark 1
+    if pc == mark1   : self.assertFalse(self.in_mm(vcd, t))
+    if pc == mark0+8: self.assertFalse(self.in_mm(vcd, t))
+
+    # Mark 2
+    if pc == mark2   : self.assertTrue(self.in_mm(vcd, t))
+    if pc == mark2+8 : self.assertFalse(self.in_mm(vcd, t))
+    if pc == mark2+16: self.assertFalse(self.in_mm(vcd, t))
+
+    # Mark 3
+    if pc == mark3   : self.assertFalse(self.in_mm(vcd, t))
+    if pc == mark3+8 : self.assertTrue(self.in_mm(vcd, t))
+    if pc == mark3+16: self.assertFalse(self.in_mm(vcd, t))
 
 if __name__ == '__main__':
   ite(len(sys.argv) > 1)
