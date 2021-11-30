@@ -61,7 +61,7 @@ start_tests:
     sw zero, 0(tp);
 
 
-#define RVTEST_MARK_NEXT .word 0x0000000b
+#define RVTEST_MARK      .word 0x0000000b
 #define RVTEST_MARK_ZERO .word 0x0000000b
 #define RVTEST_MARK_ONE  .word 0x0010000b
 #define RVTEST_MARK_TWO  .word 0x0020000b
