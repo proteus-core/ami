@@ -5,25 +5,20 @@ import MimicryTest
 
 class paddi(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
-    m_addr = vcd.get_addr_of_marked_instr()
-    tn = vcd.nextt(t)
+    mark = vcd.get_mark()
+    t = mark.WB[0]
+    self.assertTrue(self.is_persistent(vcd, t))
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 1)
 
-    is_persistent = vcd.as_int(vcd.WB.value_PERSISTENT, t) == 1
-    x5 = vcd.x5(tn)
+    t = vcd.WB2[mark.addr+4][0]
+    self.assertFalse(self.is_persistent(vcd, t))
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 1)
 
-    if pc == m_addr:
-      self.assertTrue(is_persistent)
-      self.assertEqual(x5, 1)
-
-    if pc == m_addr+4:
-      self.assertFalse(is_persistent)
-      self.assertEqual(x5, 1)
-
-    if pc == m_addr+8:
-      self.assertTrue(is_persistent)
-      self.assertEqual(x5, 2)
+    t = vcd.WB2[mark.addr+8][0]
+    self.assertTrue(self.is_persistent(vcd, t))
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 2)
 
 if __name__ == '__main__':
   paddi(len(sys.argv) > 1)

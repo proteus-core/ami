@@ -5,7 +5,7 @@ import MimicryTest
 
 class femm(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
     # TODO:
     pass

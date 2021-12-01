@@ -5,33 +5,29 @@ import MimicryTest
 
 class mmaddi(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
-    m_addr = vcd.get_addr_of_marked_instr()
+    mark = vcd.get_mark()
 
-    x5 = vcd.x5(vcd.nextt(t))
-    x6 = vcd.x6(vcd.nextt(t))
-    x7 = vcd.x7(vcd.nextt(t))
+    t = mark.WB[0]
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 0)
 
-    if pc == m_addr:
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 0)
+    t = vcd.WB2[mark.addr+4][0]
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 0)
 
-    if pc == m_addr+4:
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 0)
+    t = vcd.WB2[mark.addr+8][0]
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 0)
 
-    if pc == m_addr+8:
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 0)
-
-    if pc == m_addr + 12:
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 1)
+    t = vcd.WB2[mark.addr+12][0]
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 1)
 
     """
     if pc == m_addr + 16:

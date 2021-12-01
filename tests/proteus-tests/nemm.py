@@ -5,36 +5,28 @@ import MimicryTest
 
 class nemm(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
-    m_addr = vcd.get_addr_of_marked_instr()
+    mark = vcd.get_mark()
+    t = mark.WB[0]
+    self.assertFalse(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 0)
 
-    tn = vcd.nextt(t)
-    depth = vcd.as_int(vcd.CSR.CsrFile_depth, tn)
+    t = vcd.WB2[mark.addr+4][0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
 
-    if pc == m_addr:
-      self.assertFalse(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 0)
+    t = vcd.WB2[mark.addr+8][0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 2)
 
-    if pc == m_addr+4:
-      self.assertTrue(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 1)
+    t = vcd.WB2[mark.addr+12][0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
 
-    if pc == m_addr+8:
-      self.assertTrue(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 2)
-
-    if pc == m_addr+12:
-      self.assertTrue(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 1)
-
-    if pc == m_addr+16:
-      self.assertFalse(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 0)
-
-    if pc == m_addr+20:
-      self.assertFalse(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 0)
+    t = vcd.WB2[mark.addr+16][0]
+    self.assertFalse(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 0)
 
 if __name__ == '__main__':
   nemm(len(sys.argv) > 1)

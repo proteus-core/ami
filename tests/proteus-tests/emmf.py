@@ -5,26 +5,23 @@ import MimicryTest
 
 class emmf(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
-    m_addr = vcd.get_addr_of_marked_instr()
+    mark = vcd.get_mark()
+    t = mark.WB[0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_mime, t), 1)
+    self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_pmime, t), 0)
 
-    if pc == m_addr:
-      # @t
-      self.assertTrue(self.in_mm(vcd, t))
-      self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_mime, t), 1)
-      self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_pmime, t), 0)
-
-      # @nextt
-      tn = vcd.nextt(t)
-      self.assertFalse(self.in_mm(vcd, tn))
-      self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_mime, tn), 0)
-      self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_pmime, tn), 1)
+    tn = vcd.nextt(t)
+    self.assertFalse(self.in_mm(vcd, tn))
+    self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_mime, tn), 0)
+    self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_pmime, tn), 1)
  
-    if pc == m_addr+4:
-      self.assertTrue(self.in_mm(vcd, t))
-      self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_mime, t), 1)
-      self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_pmime, t), 0)
+    t = vcd.WB2[mark.addr+4][0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_mime, t), 1)
+    self.assertEqual(vcd.as_int(vcd.CSR.CsrFile_pmime, t), 0)
 
 if __name__ == '__main__':
   emmf(len(sys.argv) > 1)

@@ -6,10 +6,15 @@ import util
 class Mark:
 
   ###########################################################################
-  def __init__(self, epoch, addr, n):
-    self.epoch = epoch
-    self.addr  = addr
-    self.n     = n
+  def __init__(self, n, addr):
+    self.n    = n
+    self.addr = addr
+
+    self.IF  = []
+    self.ID  = []
+    self.EX  = []
+    self.MEM = []
+    self.WB  = []
 
 #############################################################################
 class ProteusVCD:
@@ -51,34 +56,35 @@ class ProteusVCD:
     return util.NestedNamespace(signal_dict)
 
   ###########################################################################
-  def locate_marks(self):
-    result = []  
+  def init_marks(self):
+
+    self.marks = {}
+
     signal = self.PL.decode_out_MARK
     for t, v in [(t, int(v, 2)) for (t, v) in self.vcd[signal].tv]:
       if v == 1:
         if self.as_int(self.PL.decode_arbitration_isValid, t) == 1:
-          result.append(t)
-    return result
+          n = self.as_int(self.PL.decode_out_IMM, t)
+          addr = self.as_int(self.PL.fetch_out_PC, t)
+          if not n in self.marks:
+            self.marks[n] = Mark(n, addr)
+
+    # WB
+    # TODO: Clean this up (unify WB and WB2)
+    signal = self.signal(self.TOP.Core.pipeline_1.writeback_out_PC)
+    self.WB2 = {}
+    for t, pc in [(t, int(v, 2)) for (t, v) in signal.tv]:
+      if not pc in self.WB2:
+        self.WB2[pc] = []
+      self.WB2[pc].append(t)
+      for (n, mark) in self.marks.items():
+        if mark.addr == pc:
+          mark.WB.append(t)
 
   ###########################################################################
-  def init_marks(self):
-    self.marks = {}
-    l = self.locate_marks()
-    for t in l:
-      addr = self.as_int(self.PL.fetch_out_PC, t)
-      n = self.as_int(self.PL.decode_out_IMM, t)
-      if not n in self.marks:
-        self.marks[n] = []
-      self.marks[n].append(Mark(t, addr, n))
-
-  ###########################################################################
-  def get_mark(self, mark=0):
-    assert mark in self.marks, "No such mark: %d" % mark 
-    return self.marks[mark]
-
-  ###########################################################################
-  def get_addr_of_marked_instr(self, mark=0):
-    return self.get_mark(mark)[0].addr
+  def get_mark(self, n=0):
+    assert n in self.marks, "No such mark: %d" % n 
+    return self.marks[n]
 
   ###########################################################################
   def signal(self, name):

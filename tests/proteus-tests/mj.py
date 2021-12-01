@@ -5,68 +5,67 @@ import MimicryTest
 
 class mj(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
+
+    # Mark 1
+    mark1 = vcd.get_mark(0x01)
+
+    t = mark1.WB[0]
+    self.assertTrue(self.is_mimic(vcd, t))
+    self.assertTrue(self.is_jump(vcd, t))
+    self.assertFalse(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 0)
 
     tn = vcd.nextt(t)
+    self.assertTrue(self.in_mm(vcd, tn))
+    self.assertEqual(self.mm_depth(vcd, tn), 1)
+    self.assertEqual(self.mm_exit(vcd, tn), mark1.addr+4)
 
-    mark1   = vcd.get_addr_of_marked_instr(0x01)
-    mark2   = vcd.get_addr_of_marked_instr(0x02)
-    mark11  = vcd.get_addr_of_marked_instr(0x11)
-    mark22  = vcd.get_addr_of_marked_instr(0x22)
-    mark222 = vcd.get_addr_of_marked_instr(0x222)
+    # Mark 2
+    mark2 = vcd.get_mark(0x02)
 
-    is_mimic = vcd.as_int(vcd.WB.value_MIMIC, t) == 1
-    is_jump = vcd.as_int(vcd.WB.value_ISJUMP, t) == 1
+    t = mark2.WB[0]
+    self.assertTrue(self.is_mimic(vcd, t))
+    self.assertTrue(self.is_jump(vcd, t))
+    self.assertFalse(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 0)
 
-    depth  = vcd.as_int(vcd.CSR.CsrFile_depth, t)
-    depthn = vcd.as_int(vcd.CSR.CsrFile_depth, tn)
+    tn = vcd.nextt(t)
+    self.assertTrue(self.in_mm(vcd, tn))
+    self.assertEqual(self.mm_depth(vcd, tn), 1)
+    self.assertEqual(self.mm_exit(vcd, tn), mark2.addr+4)
 
-    exit = vcd.as_int(vcd.CSR.CsrFile_exit, t)
-    exitn = vcd.as_int(vcd.CSR.CsrFile_exit, tn)
+    # Mark 11
+    mark11 = vcd.get_mark(0x11)
 
-    if pc == mark1:
-      self.assertTrue(is_mimic)
-      self.assertTrue(is_jump)
-      self.assertFalse(self.in_mm(vcd, t))
-      self.assertTrue(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 0)
-      self.assertEqual(depthn, 1)
-      self.assertEqual(exitn, mark1+4)
+    t = mark11.WB[0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_exit(vcd, t), mark1.addr+4)
 
-    if pc == mark2:
-      self.assertTrue(is_mimic)
-      self.assertTrue(is_jump)
-      self.assertFalse(self.in_mm(vcd, t))
-      self.assertTrue(self.in_mm(vcd, tn))
-      self.assertEqual(depth, 0)
-      self.assertEqual(depthn, 1)
-      self.assertEqual(exitn, mark2+4)
+    # Mark 22
+    mark22 = vcd.get_mark(0x22)
 
-    if pc == mark11:
-      self.assertTrue(self.in_mm(vcd, t))
-      self.assertEqual(depth, 1)
-      self.assertEqual(exit, mark1+4)
-
-    if pc == mark22:
-      self.assertTrue(self.in_mm(vcd, t))
-      self.assertEqual(depth, 1)
-      self.assertEqual(exit, mark2+4)
+    t = mark22.WB[0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
       
-    if pc == mark222:
-      marks = vcd.get_mark(0x222)
-      assert len(marks) == 2, "Unexpected execution count: %d" % len(marks)
+    # Mark 222 - Non-recursive call
+    mark222 = vcd.get_mark(0x222)
 
-      # First call
-      t1 = marks[0].epoch
-      self.assertTrue(self.in_mm(vcd, t1))
-      self.assertEqual(depth, 1)
-      self.assertEqual(exit, mark2+4)
+    t = mark222.WB[0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
 
-      # Recursive call
-      t2 = marks[1].epoch
-      self.assertTrue(self.in_mm(vcd, t2))
-      self.assertEqual(depth, 1)
-      self.assertEqual(exit, mark2+4)
+    # Mark 222 - Recursive call
+    mark222 = vcd.get_mark(0x222)
+
+    t = mark222.WB[1]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
 
 if __name__ == '__main__':
   mj(len(sys.argv) > 1)

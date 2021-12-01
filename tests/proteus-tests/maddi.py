@@ -5,33 +5,27 @@ import MimicryTest
 
 class maddi(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
-    m_addr = vcd.get_addr_of_marked_instr()
-    tn = vcd.nextt(t)
+    mark = vcd.get_mark()
 
-    x5 = vcd.x5(tn)
-    x6 = vcd.x6(tn)
-    x7 = vcd.x7(tn)
-    is_mimic = vcd.as_int(vcd.WB.value_MIMIC, t) == 1
+    t = mark.WB[0]
+    self.assertTrue(self.is_mimic(vcd, t))
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 0)
 
-    if pc == m_addr:
-      self.assertTrue(is_mimic)
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 0)
+    t = vcd.WB2[mark.addr+4][0]
+    self.assertTrue(self.is_mimic(vcd, t))
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 0)
 
-    if pc == m_addr+4:
-      self.assertTrue(is_mimic)
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 0)
-
-    if pc == m_addr+8:
-      self.assertFalse(is_mimic)
-      self.assertEqual(x5, 0)
-      self.assertEqual(x6, 0)
-      self.assertEqual(x7, 1)
+    t = vcd.WB2[mark.addr+8][0]
+    self.assertFalse(self.is_mimic(vcd, t))
+    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
+    self.assertEqual(vcd.x7(vcd.nextt(t)), 1)
 
 if __name__ == '__main__':
   maddi(len(sys.argv) > 1)

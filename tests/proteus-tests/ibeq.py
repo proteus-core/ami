@@ -5,33 +5,28 @@ import MimicryTest
 
 class ibeq(MimicryTest.MimicryTest):
 
-  def on_change_writeback_pc(self, vcd, t, pc):
+  def run(self, vcd):
 
-    mark0 = vcd.get_addr_of_marked_instr(0x00)
-    mark1 = vcd.get_addr_of_marked_instr(0x01)
+    mark0 = vcd.get_mark(0x00)
+    t = mark0.WB[0]
+    self.assertTrue(self.is_invert(vcd, t))
+    self.assertTrue(self.is_taken(vcd, t))
+    self.assertFalse(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 0)
 
-    is_invert = vcd.as_int(vcd.WB.value_INVERT, t) == 1
-    is_taken = vcd.as_int(vcd.WB.value_OUTCOME, t) == 1
-    depth = vcd.as_int(vcd.CSR.CsrFile_depth, t)
+    t = vcd.WB2[mark0.addr+4][0]
+    self.assertTrue(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
 
-    if pc == mark0:
-      self.assertTrue(is_invert)
-      self.assertTrue(is_taken)
-      self.assertFalse(self.in_mm(vcd, t))
-      self.assertEqual(depth, 0)
+    mark1 = vcd.get_mark(0x01)
+    t = mark1.WB[0]
+    self.assertTrue(self.is_invert(vcd, t))
+    self.assertFalse(self.is_taken(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 1)
 
-    if pc == mark0 + 4:
-      self.assertTrue(self.in_mm(vcd, t))
-      self.assertEqual(depth, 1)
-
-    if pc == mark1:
-      self.assertTrue(is_invert)
-      self.assertFalse(is_taken)
-      self.assertEqual(depth, 1)
-
-    if pc == mark1 + 4:
-      self.assertFalse(self.in_mm(vcd, t))
-      self.assertEqual(depth, 0)
+    t = vcd.WB2[mark1.addr+4][0]
+    self.assertFalse(self.in_mm(vcd, t))
+    self.assertEqual(self.mm_depth(vcd, t), 0)
 
 if __name__ == '__main__':
   ibeq(len(sys.argv) > 1)
