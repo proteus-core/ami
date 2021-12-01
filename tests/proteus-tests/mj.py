@@ -53,10 +53,20 @@ class mj(MimicryTest.MimicryTest):
       self.assertEqual(exit, mark2+4)
       
     if pc == mark222:
-      self.assertTrue(self.in_mm(vcd, t))
+      marks = vcd.get_mark(0x222)
+      assert len(marks) == 2, "Unexpected execution count: %d" % len(marks)
+
+      # First call
+      t1 = marks[0].epoch
+      self.assertTrue(self.in_mm(vcd, t1))
       self.assertEqual(depth, 1)
       self.assertEqual(exit, mark2+4)
 
+      # Recursive call
+      t2 = marks[1].epoch
+      self.assertTrue(self.in_mm(vcd, t2))
+      self.assertEqual(depth, 1)
+      self.assertEqual(exit, mark2+4)
 
 if __name__ == '__main__':
   mj(len(sys.argv) > 1)
