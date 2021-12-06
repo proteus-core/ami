@@ -188,6 +188,7 @@ class Mimicry() extends Plugin[Pipeline] {
             mmentry.write(PC)
             mmexit.write(PC+4)
             mmstatNew(CSR_MMSTAT_DEPTH) := 1
+            mmstat.write(mmstatNew)
           }
 
           // 1.1) Are we dealing with an activating branch?
@@ -195,6 +196,7 @@ class Mimicry() extends Plugin[Pipeline] {
             mmentry.write(PC)
             mmexit.write(value(Data.MMEXIT))
             mmstatNew(CSR_MMSTAT_DEPTH) := 1
+            mmstat.write(mmstatNew)
           }
         }
 
@@ -202,6 +204,7 @@ class Mimicry() extends Plugin[Pipeline] {
         when (PC === mmentry.read()) {
           // TODO: assert depth > 0
           mmstatNew(CSR_MMSTAT_DEPTH) := depth + 1 // Update recursion depth
+          mmstat.write(mmstatNew)
         }
 
         val isExit = (depth === 1) && (PC === mmexit.read())
@@ -215,6 +218,7 @@ class Mimicry() extends Plugin[Pipeline] {
           }
           // TODO: assert depth > 0
           mmstatNew(CSR_MMSTAT_DEPTH) := depth - 1 // Update recursion depth
+          mmstat.write(mmstatNew)
         }
 
         // 4) Do we need to mimic execution?
@@ -231,8 +235,6 @@ class Mimicry() extends Plugin[Pipeline] {
             output(pipeline.data.RD_TYPE) := RegisterType.NONE
           }
         }
-
-        mmstat.write(mmstatNew)
       }
     }
 

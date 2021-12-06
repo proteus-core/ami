@@ -16,6 +16,7 @@ class mj(MimicryTest.MimicryTest):
 
     tn = vcd.nextt(t)
     self.assertTrue(self.in_mm(vcd, tn))
+    self.assertEqual(self.mm_entry(vcd, tn), mark1.addr)
     self.assertEqual(self.mm_exit(vcd, tn), mark1.addr+4)
 
     # Mark 2
@@ -29,6 +30,7 @@ class mj(MimicryTest.MimicryTest):
     tn = vcd.nextt(t)
     self.assertTrue(self.in_mm(vcd, tn))
     self.assertEqual(self.mm_depth(vcd, tn), 1)
+    self.assertEqual(self.mm_entry(vcd, tn), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, tn), mark2.addr+4)
 
     # Mark 11
@@ -37,6 +39,7 @@ class mj(MimicryTest.MimicryTest):
     t = mark11.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
     self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_entry(vcd, t), mark1.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark1.addr+4)
 
     # Mark 22
@@ -45,6 +48,7 @@ class mj(MimicryTest.MimicryTest):
     t = mark22.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
     self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_entry(vcd, t), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
       
     # Mark 222 - Non-recursive call
@@ -53,6 +57,7 @@ class mj(MimicryTest.MimicryTest):
     t = mark222.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
     self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_entry(vcd, t), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
 
     # Mark 222 - Recursive call
@@ -61,6 +66,7 @@ class mj(MimicryTest.MimicryTest):
     t = mark222.WB[1]
     self.assertTrue(self.in_mm(vcd, t))
     self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_entry(vcd, t), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
 
 if __name__ == '__main__':

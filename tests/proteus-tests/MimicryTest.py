@@ -11,6 +11,9 @@ class MimicryTest(ProteusTest.ProteusTest):
   def mm_depth(self, vcd, t):
     return vcd.as_int(vcd.CSR.CsrFile_depth, t)
 
+  def mm_pdepth(self, vcd, t):
+    return vcd.as_int(vcd.CSR.CsrFile_pdepth, t)
+
   def in_mm(self, vcd, t): 
     return self.mm_depth(vcd, t) > 0
 

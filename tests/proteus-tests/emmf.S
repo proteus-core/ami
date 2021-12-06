@@ -12,9 +12,9 @@
 RVTEST_CODE_BEGIN
 
   li x5, -1
-  emm 1f
+  emm 0f
   mark 0
-  # FIXME: sw zero, 0(x5)
+  sw zero, 0(x5)
   nop
 
 1:
