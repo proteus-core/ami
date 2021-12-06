@@ -12,12 +12,12 @@
 RVTEST_CODE_BEGIN
 
   li x5, -1
-  MIMICRY_EMM
-  RVTEST_MARK
-  sw zero, 0(x5)
+  emm 1f
+  mark 0
+  # FIXME: sw zero, 0(x5)
   nop
-  MIMICRY_DMM
 
+1:
   TEST_PASSFAIL
 
 mtvec_handler:

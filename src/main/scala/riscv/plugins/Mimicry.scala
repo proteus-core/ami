@@ -8,84 +8,19 @@ class Mimicry() extends Plugin[Pipeline] {
 
   override def getImplementedExtensions = Seq('X')
 
-  private val CSR_MMIMSTAT       = 0x7FF          // mmimstat CSR identifier
-  private val CSR_MIMSTAT_MIME   = 0              // mimicry mode enabled (mime)
-  private val CSR_MIMSTAT_PMIME  = 1              // previous mime (pmime)
-  private val CSR_MIMSTAT_DEPTH  = (31 downto 2)  // activation nesting level
+  private val CSR_MMSTAT        = 0x7FF          // CSR identifier
+  private val CSR_MMSTAT_DEPTH  = (15 downto 0)  // activation nesting level
+  private val CSR_MMSTAT_PDEPTH = (31 downto 16) // previous nesting level
 
-  private val CSR_MMIMEXIT       = 0x7EF      // mmimexit CSR identifier
-  private val CSR_MIMEXIT_NONE   = 0x7FFFFFFF // TODO: which value?
+  private val CSR_MMENTRY      = 0x7DF         // CSR identifier
+  private val CSR_MMEXIT       = 0x7EF         // CSR identifier
+  private val CSR_MMADDR_NONE  = 0x7FFFFFFF    // TODO: which value?
 
-  private object Data {
-    object ISJUMP extends PipelineData(Bool())
-    object OUTCOME extends PipelineData(Bool()) // Outcome of branch predicate
-
-    // Mimic execution
-    object GHOST extends PipelineData(Bool())      // Ghost instruction
-    object MIMIC extends PipelineData(Bool())      // Always mimic
-    object PERSISTENT extends PipelineData(Bool()) // Always execute
-
-    // Conditional mimicry (CM)
-    object ACTIVATE extends PipelineData(Bool())   // Activate conditionaly
-    object INVERT extends PipelineData(Bool())     // Activate or deactivate
-    object DEACTIVATE extends PipelineData(Bool()) // Deactivate conditionally
+  def isJump(ir: UInt): Bool = {
+    (ir === Opcodes.JAL)  ||
+    (ir === Opcodes.JALR)
   }
-
-  // mmimstat CSR: machine mimicry mode status
-  private class Mmimstat(implicit config: Config) extends Csr {
-    val mime   = Reg(Bool).init(False)
-    val pmime  = Reg(Bool).init(False)
-    val depth  = Reg(UInt(CSR_MIMSTAT_DEPTH.length bits)).init(0)
-
-    val mmimstat = depth ## pmime ## mime
-
-    override def read(): UInt = mmimstat.asUInt
-
-    override def write(value: UInt): Unit = {
-      mime := value(CSR_MIMSTAT_MIME)
-      pmime := value(CSR_MIMSTAT_PMIME)
-      depth := value(CSR_MIMSTAT_DEPTH)
-    }
-
-    override def swWrite(value: UInt): Unit = {
-      when (value(CSR_MIMSTAT_MIME)) {
-        mime := True
-        depth := depth + 1
-      } otherwise {
-        when (depth > 0) {
-          when (depth === 1) {
-            mime := False
-          }
-          depth := depth - 1  // TODO: assert depth > 0
-        }
-      }
-    }
-  }
-
-  // mmimexit CSR: machine mimicry mode exit address
-  private class Mmimexit(implicit config: Config) extends Csr {
-
-    val exit = Reg(UInt(config.xlen bits)).init(CSR_MIMEXIT_NONE)
-
-    override def read(): UInt = exit
-
-    override def write(value: UInt): Unit = {
-      exit := value
-    }
-  }
-
-  def inMimicryExecutionMode(stage: Stage): Bool = {
-    stage.value(Data.GHOST)   ||
-    stage.value(Data.MIMIC)   ||
-    stage.value(Data.PERSISTENT)
-  }
-
-  def inConditionalMimicry(stage: Stage): Bool = {
-    stage.value(Data.ACTIVATE)   ||
-    stage.value(Data.INVERT)     ||
-    stage.value(Data.DEACTIVATE)
-  }
-
+  
   def isConditional(ir: UInt): Bool = {
     (ir === Opcodes.BEQ)  ||
     (ir === Opcodes.BNE)  ||
@@ -95,30 +30,73 @@ class Mimicry() extends Plugin[Pipeline] {
     (ir === Opcodes.BGEU)
   }
 
-  def isJump(ir: UInt): Bool = {
-    (ir === Opcodes.JAL)  ||
-    (ir === Opcodes.JALR)
+  // TODO: Prefix with MM
+  private object Data {
+    // Mimic execution
+    object GHOST extends PipelineData(Bool())      // Ghost instruction
+    object MIMIC extends PipelineData(Bool())      // Always mimic
+    object PERSISTENT extends PipelineData(Bool()) // Always execute
+
+    // Activating control-flow
+    object AJUMP extends PipelineData(Bool())         // Activating jump
+    object ABRANCH extends PipelineData(Bool())       // Activating branch
+    object OUTCOME extends PipelineData(Bool())       // Branch outcome
+    object MMEXIT extends PipelineData(UInt(32 bits)) // Mimicry exit address
+  }
+
+  // Mimicry mode entry
+  private class MmEntry(implicit config: Config) extends Csr {
+
+    val entry = Reg(UInt(config.xlen bits)).init(CSR_MMADDR_NONE)
+
+    override def read(): UInt = entry
+
+    override def write(addr: UInt): Unit = entry := addr
+  }
+
+  // Mimicry mode exit
+  private class MmExit(implicit config: Config) extends Csr {
+
+    val exit = Reg(UInt(config.xlen bits)).init(CSR_MMADDR_NONE)
+
+    override def read(): UInt = exit
+
+    override def write(addr: UInt): Unit = exit := addr
+  }
+
+  // Mimicry mode status information
+  private class MmStat(implicit config: Config) extends Csr {
+    val depth  = Reg(UInt(CSR_MMSTAT_DEPTH.length bits)).init(0)
+    val pdepth = Reg(UInt(CSR_MMSTAT_DEPTH.length bits)).init(0)
+
+    val mmstat = pdepth ## depth
+
+    override def read(): UInt = mmstat.asUInt
+
+    override def write(value: UInt): Unit = {
+      depth := value(CSR_MMSTAT_DEPTH)
+      pdepth := value(CSR_MMSTAT_PDEPTH)
+    }
   }
 
   override def setup(): Unit = {
+
     val csrService = pipeline.getService[CsrService]
-    csrService.registerCsr(CSR_MMIMSTAT, new Mmimstat)
-    csrService.registerCsr(CSR_MMIMEXIT, new Mmimexit)
+    csrService.registerCsr(CSR_MMSTAT, new MmStat)
+    csrService.registerCsr(CSR_MMENTRY, new MmEntry)
+    csrService.registerCsr(CSR_MMEXIT , new MmExit)
 
     pipeline.getService[DecoderService].configure { config =>
       config.addDefault(Map(
-        Data.ISJUMP  -> False,
-        Data.OUTCOME -> False,
-
         // Mimic execution
         Data.GHOST      -> False,
         Data.MIMIC      -> False,
         Data.PERSISTENT -> False,
 
-        // Conditional mimicry (CM)
-        Data.ACTIVATE   -> False,
-        Data.INVERT     -> False,
-        Data.DEACTIVATE -> False
+        // Activating control-flow
+        Data.AJUMP   -> False,
+        Data.ABRANCH -> False,
+        Data.OUTCOME -> False
       ))
 
       val stage = pipeline.retirementStage
@@ -129,30 +107,22 @@ class Mimicry() extends Plugin[Pipeline] {
         when (ir =/= 0) {
           switch (ir(1 downto 0)) {
             is(0) { 
-              when (isConditional(result)) {
-                stage.output(Data.INVERT) := True
-              } otherwise {
-                stage.output(Data.GHOST) := True 
-              }
+              stage.output(Data.GHOST) := True 
             }
             is(1) { 
-              when (isConditional(result)) {
-                stage.output(Data.ACTIVATE) := True
+              when (isJump(result)) {
+                stage.output(Data.AJUMP) := True
+              } elsewhen (isConditional(result)) {
+                stage.output(Data.ABRANCH) := True
               } otherwise {
                 stage.output(Data.MIMIC) := True 
               }
             }
             is(2) { 
-              when (isConditional(result)) {
-                stage.output(Data.DEACTIVATE) := True
-              } otherwise {
-                stage.output(Data.PERSISTENT) := True 
-              }
+              stage.output(Data.PERSISTENT) := True 
             }
           }
         }
-
-        stage.output(Data.ISJUMP) := isJump(result)
 
         result
       })
@@ -160,30 +130,32 @@ class Mimicry() extends Plugin[Pipeline] {
 
     pipeline.getService[JumpService].onJump { (stage, _, _, jumpType) =>
 
-      val mimstat = Utils.outsideConditionScope(slave(new CsrIo))
-      val mimstatCurrent = mimstat.read()
-      val mimstatNew = UInt(config.xlen bits)
-      mimstatNew := mimstatCurrent
+      val mmstat = Utils.outsideConditionScope(slave(new CsrIo))
+      val mmstatCur = mmstat.read()
+      val mmstatNew = UInt(config.xlen bits)
+      mmstatNew := mmstatCur
 
       jumpType match {
         case JumpType.Trap =>
-          mimstatNew(CSR_MIMSTAT_MIME) := False
-          mimstatNew(CSR_MIMSTAT_PMIME) := mimstatCurrent(CSR_MIMSTAT_MIME)
+          mmstatNew(CSR_MMSTAT_DEPTH) := U(0)
+          mmstatNew(CSR_MMSTAT_PDEPTH) := mmstatCur(CSR_MMSTAT_DEPTH)
+          mmstat.write(mmstatNew)
         case JumpType.TrapReturn =>
-          mimstatNew(CSR_MIMSTAT_MIME) := mimstatCurrent(CSR_MIMSTAT_PMIME)
-          mimstatNew(CSR_MIMSTAT_PMIME) := False
+          mmstatNew(CSR_MMSTAT_DEPTH) := mmstatCur(CSR_MMSTAT_PDEPTH)
+          mmstatNew(CSR_MMSTAT_PDEPTH) := U(0)
+          mmstat.write(mmstatNew)
         case JumpType.Normal =>
-          when (inConditionalMimicry(stage)) {
+          when (stage.value(Data.ABRANCH)) {
             pipeline.getService[JumpService].disableJump(stage)
+            // TODO: Get rid of Data.OUTCOME (redundant with Data.MMEXIT)
             stage.output(Data.OUTCOME) := True
+            stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
           }
       }
 
-      mimstat.write(mimstatNew)
-      
       pipeline plug new Area {
         val csrService = pipeline.getService[CsrService]
-        mimstat <> csrService.getCsr(CSR_MMIMSTAT)
+        mmstat <> csrService.getCsr(CSR_MMSTAT)
       }
     }
   }
@@ -191,88 +163,84 @@ class Mimicry() extends Plugin[Pipeline] {
   override def build(): Unit = {
 
     val stage = pipeline.retirementStage
+
     val mimicryArea = stage plug new Area {
       import stage._
 
-      val mimstat = slave(new CsrIo)
-      val mimstatCurrent = mimstat.read()
-      val mimstatNew = UInt(config.xlen bits)
-      mimstatNew := mimstatCurrent
+      val mmstat  = slave(new CsrIo)
+      val mmentry = slave(new CsrIo)
+      val mmexit  = slave(new CsrIo)
 
-      val mimexit = slave(new CsrIo)
+      // TODO: check more arbitration logic ?
+      when (arbitration.isValid) {
 
-      // TODO: check arbitration logic ?
+        val mmstatCur = mmstat.read()
+        val mmstatNew = UInt(config.xlen bits)
+        val depth     = mmstatCur(CSR_MMSTAT_DEPTH)
+        val PC        = value(pipeline.data.PC)
+        mmstatNew := mmstatCur
 
-      // Deactivate mimicry mode when
-      //   - we are executing in an outermost region
-      //   - and the progam counter equals the exit address
-      when (   (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 1)
-            && (value(pipeline.data.PC) === mimexit.read()) ) {
-        // TODO: How to avoid duplication with mimstat.swWrite ?
-        mimstatNew(CSR_MIMSTAT_MIME) := False
-        mimstatNew(CSR_MIMSTAT_DEPTH) := 0
-        mimstat.write(mimstatNew)
-        mimexit.write(CSR_MIMEXIT_NONE)
+        // 1) Is mimicry mode disabled?
+        when (depth === 0) {
 
-        // TODO: - Code below should read from mimstatNew?
-        //       - Or always read from mimstatCurrent and update that one too?
-      }
-
-      // Case 1: Conditional mimicry
-      when (inConditionalMimicry(stage)) {
-        val depth = mimstatCurrent(CSR_MIMSTAT_DEPTH)
-
-        // TODO: How to avoid duplication with mimstat.swWrite ?
-        when (value(Data.ACTIVATE)) {
-          when (value(Data.OUTCOME)) {
-            mimstatNew(CSR_MIMSTAT_MIME) := True
-            mimstatNew(CSR_MIMSTAT_DEPTH) := depth + 1
+          // 1.1) Are we dealing with an activating jump?
+          when (value(Data.AJUMP)) {
+            mmentry.write(PC)
+            mmexit.write(PC+4)
+            mmstatNew(CSR_MMSTAT_DEPTH) := 1
           }
-        } elsewhen (value(Data.INVERT)) {
-          when (value(Data.OUTCOME)) {
-            mimstatNew(CSR_MIMSTAT_MIME) := True
-            mimstatNew(CSR_MIMSTAT_DEPTH) := depth + 1
-          } otherwise {
-            mimstatNew(CSR_MIMSTAT_MIME) := False
-            mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1
-          }
-        } otherwise {
-          // TODO: assert value(Data.DEACTIVATE)
-          when (value(Data.OUTCOME)) {
-            mimstatNew(CSR_MIMSTAT_MIME) := False
-            mimstatNew(CSR_MIMSTAT_DEPTH) := depth - 1 // TODO: assert depth > 0
+
+          // 1.1) Are we dealing with an activating branch?
+          when (value(Data.ABRANCH) && value(Data.OUTCOME)) {
+            mmentry.write(PC)
+            mmexit.write(value(Data.MMEXIT))
+            mmstatNew(CSR_MMSTAT_DEPTH) := 1
           }
         }
 
-        mimstat.write(mimstatNew)
-
-      // Case 2: Mimic jump
-      } elsewhen (value(Data.MIMIC) && value(Data.ISJUMP)) {
-        // If this is an outermost region, activate mimicry mode and regsiter
-        // the address of the next instruction as the exit address
-        when (mimstatCurrent(CSR_MIMSTAT_DEPTH) === 0) {
-          mimstatNew(CSR_MIMSTAT_MIME) := True
-          mimstatNew(CSR_MIMSTAT_DEPTH) := 1
-
-          mimstat.write(mimstatNew)
-          mimexit.write(value(pipeline.data.PC)+4)
+        // 2) Is the current program counter registered as the entry address?
+        when (PC === mmentry.read()) {
+          // TODO: assert depth > 0
+          mmstatNew(CSR_MMSTAT_DEPTH) := depth + 1 // Update recursion depth
         }
 
-      // Case 3: Mimic exeuction 
-      } elsewhen (!value(Data.PERSISTENT)) {
-        val mime = mimstat.read()(CSR_MIMSTAT_MIME)
-        when (   value(Data.MIMIC)
-              || (mime && (!value(Data.GHOST)))
-              || (!mime && (value(Data.GHOST)))) {
+        val isExit = (depth === 1) && (PC === mmexit.read())
+
+        // 3) Is the current program counter registered as the exit address?
+        when (PC === mmexit.read()) {
+          when (depth === 1) {
+            // We are exiting mimicry mode
+            mmentry.write(CSR_MMADDR_NONE)
+            mmexit.write(CSR_MMADDR_NONE)
+          }
+          // TODO: assert depth > 0
+          mmstatNew(CSR_MMSTAT_DEPTH) := depth - 1 // Update recursion depth
+        }
+
+        // 4) Do we need to mimic execution?
+        when (value(Data.MIMIC)) {
           output(pipeline.data.RD_TYPE) := RegisterType.NONE
         }
+
+        when (value(Data.GHOST)) {
+          when ((depth === 0) || isExit) {
+            output(pipeline.data.RD_TYPE) := RegisterType.NONE
+          }
+        } elsewhen (!value(Data.PERSISTENT)) {
+          when ((depth > 0) && (! isExit)) {
+            output(pipeline.data.RD_TYPE) := RegisterType.NONE
+          }
+        }
+
+        mmstat.write(mmstatNew)
       }
     }
 
     pipeline plug new Area {
       val csrService = pipeline.getService[CsrService]
-      mimicryArea.mimstat <> csrService.getCsr(CSR_MMIMSTAT)
-      mimicryArea.mimexit <> csrService.getCsr(CSR_MMIMEXIT)
+      mimicryArea.mmstat  <> csrService.getCsr(CSR_MMSTAT)
+      mimicryArea.mmentry <> csrService.getCsr(CSR_MMENTRY)
+      mimicryArea.mmexit  <> csrService.getCsr(CSR_MMEXIT)
     }
   }
 }

@@ -15,11 +15,6 @@ class gaddi(MimicryTest.MimicryTest):
 
     t = vcd.WB2[mark.addr+4][0]
     tn = vcd.nextt(t)
-    self.assertFalse(self.is_ghost(vcd, t))
-    self.assertEqual(vcd.x5(tn), 1)
-
-    t = vcd.WB2[mark.addr+8][0]
-    tn = vcd.nextt(t)
     self.assertTrue(self.is_ghost(vcd, t))
     self.assertEqual(vcd.x5(tn), 1)
 

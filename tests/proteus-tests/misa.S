@@ -11,7 +11,7 @@
 
 RVTEST_CODE_BEGIN
 
-  RVTEST_MARK
+  mark 0
   nop
 
   TEST_PASSFAIL

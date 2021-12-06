@@ -8,11 +8,14 @@ class MimicryTest(ProteusTest.ProteusTest):
   """
   Returns true if the inMimicryMode signal is set at time t
   """
-  def in_mm(self, vcd, t): 
-    return vcd.as_int(vcd.CSR.CsrFile_mime, t) == 1
-
   def mm_depth(self, vcd, t):
     return vcd.as_int(vcd.CSR.CsrFile_depth, t)
+
+  def in_mm(self, vcd, t): 
+    return self.mm_depth(vcd, t) > 0
+
+  def mm_entry(self, vcd, t):
+    return vcd.as_int(vcd.CSR.CsrFile_entry, t)
 
   def mm_exit(self, vcd, t):
     return vcd.as_int(vcd.CSR.CsrFile_exit, t)
@@ -26,17 +29,11 @@ class MimicryTest(ProteusTest.ProteusTest):
   def is_persistent(self, vcd, t):
     return vcd.as_int(vcd.WB.value_PERSISTENT, t) == 1
 
-  def is_jump(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_ISJUMP, t) == 1
+  def is_ajump(self, vcd, t):
+    return vcd.as_int(vcd.WB.value_AJUMP, t) == 1
 
-  def is_activate(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_ACTIVATE, t) == 1
-
-  def is_deactivate(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_DEACTIVATE, t) == 1
-
-  def is_invert(self, vcd, t):
-    return vcd.as_int(vcd.WB.value_INVERT, t) == 1
+  def is_abranch(self, vcd, t):
+    return vcd.as_int(vcd.WB.value_ABRANCH, t) == 1
 
   def is_taken(self, vcd, t):
     return vcd.as_int(vcd.WB.value_OUTCOME, t) == 1

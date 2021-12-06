@@ -13,10 +13,10 @@ RVTEST_CODE_BEGIN
 
   li x5, 0
   
-  MIMICRY_EMM
-  RVTEST_MARK
+  emm 1f
+  mark 0
   p.addi x5, x5, 1   # assert x5 == 1
-  MIMICRY_DMM
+1:
   p.addi x5, x5, 1   # assert x5 == 2 
 
   TEST_PASSFAIL

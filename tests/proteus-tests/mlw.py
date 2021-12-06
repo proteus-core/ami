@@ -11,8 +11,6 @@ class mlw(MimicryTest.MimicryTest):
     t = mark.WB[0]
     self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
     t = vcd.WB2[mark.addr+4][0]
-    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
-    t = vcd.WB2[mark.addr+12][0]
     self.assertEqual(vcd.x6(vcd.nextt(t)), 0xdeadbeef)
 
 if __name__ == '__main__':

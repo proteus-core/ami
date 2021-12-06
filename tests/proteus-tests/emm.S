@@ -10,10 +10,11 @@
 
 RVTEST_CODE_BEGIN
 
-  MIMICRY_EMM
-  RVTEST_MARK
+  emm 1f
+  mark 0
   nop
-  MIMICRY_DMM
+1:
+  nop
 
   TEST_PASSFAIL
 

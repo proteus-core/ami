@@ -22,11 +22,6 @@ class mmaddi(MimicryTest.MimicryTest):
     t = vcd.WB2[mark.addr+8][0]
     self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
     self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
-    self.assertEqual(vcd.x7(vcd.nextt(t)), 0)
-
-    t = vcd.WB2[mark.addr+12][0]
-    self.assertEqual(vcd.x5(vcd.nextt(t)), 0)
-    self.assertEqual(vcd.x6(vcd.nextt(t)), 0)
     self.assertEqual(vcd.x7(vcd.nextt(t)), 1)
 
     """

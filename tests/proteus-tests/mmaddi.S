@@ -18,12 +18,11 @@ RVTEST_CODE_BEGIN
   li x6, 0
   li x7, 0
   
-  MIMICRY_EMM
-  RVTEST_MARK
+  emm 1f
+  mark 0
   addi x5, x5, 1     # assert x5 == 0
   addi x6, x6, 1     # assert x6 == 0
-  
-  MIMICRY_DMM
+1:
   #TODO: addi x6, x6, 1     # Tests forwarding, assert x6 == 1 (assert x6 != 2 )
   addi x7, x7, 1     # assert x7 == 1 
 

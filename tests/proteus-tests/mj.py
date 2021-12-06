@@ -11,22 +11,18 @@ class mj(MimicryTest.MimicryTest):
     mark1 = vcd.get_mark(0x01)
 
     t = mark1.WB[0]
-    self.assertTrue(self.is_mimic(vcd, t))
-    self.assertTrue(self.is_jump(vcd, t))
+    self.assertTrue(self.is_ajump(vcd, t))
     self.assertFalse(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 0)
 
     tn = vcd.nextt(t)
     self.assertTrue(self.in_mm(vcd, tn))
-    self.assertEqual(self.mm_depth(vcd, tn), 1)
     self.assertEqual(self.mm_exit(vcd, tn), mark1.addr+4)
 
     # Mark 2
     mark2 = vcd.get_mark(0x02)
 
     t = mark2.WB[0]
-    self.assertTrue(self.is_mimic(vcd, t))
-    self.assertTrue(self.is_jump(vcd, t))
+    self.assertTrue(self.is_ajump(vcd, t))
     self.assertFalse(self.in_mm(vcd, t))
     self.assertEqual(self.mm_depth(vcd, t), 0)
 

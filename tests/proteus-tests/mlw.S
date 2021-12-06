@@ -13,10 +13,10 @@ RVTEST_CODE_BEGIN
   la x5, tdata
   li x6, 0
 
-  MIMICRY_EMM
-  RVTEST_MARK
+  emm 1f
+  mark 0
   lw x6, 0(x5)  # assert x6 == 0
-  MIMICRY_DMM
+1:
   lw x6, 0(x5)  # assert x6 == 0xdeadbeef
 
   TEST_PASSFAIL

@@ -1,8 +1,8 @@
 #*****************************************************************************
-# ibeq.S
+# abeq.S
 #-----------------------------------------------------------------------------
 #
-# Test i.beq instruction
+# Test a.beq instruction
 #
 
 #include "riscv_test.h"
@@ -10,17 +10,20 @@
 
 RVTEST_CODE_BEGIN
 
-  RVTEST_MARK_ZERO
-  i.beq x0, x0, 1f
+  li x5, 42
+  mark 0
+  a.beq x5, x5, 1f
   nop
-
 1:
+  addi x5, x5, 1
+
   li x5, 42 
-  RVTEST_MARK_ONE
-  i.beq x0, x5, 2f
+  mark 1
+  a.beq x0, x5, 2f
+  nop
+2:
   nop
 
-2:
   TEST_PASSFAIL
 
 RVTEST_CODE_END
