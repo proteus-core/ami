@@ -12,7 +12,7 @@
 RVTEST_CODE_BEGIN
 
   li x5, -1
-  emm 0f
+  emm 1f
   mark 0
   sw zero, 0(x5)
   nop
