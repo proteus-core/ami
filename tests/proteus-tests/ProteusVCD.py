@@ -120,3 +120,10 @@ class ProteusVCD:
   def x7(self, t):
     return self.as_int(self.RF.x7_t2, t)
 
+  #########################################################################
+  def t0(self, t):
+    return self.x5(t)
+
+  #########################################################################
+  def t1(self, t):
+    return self.x6(t)

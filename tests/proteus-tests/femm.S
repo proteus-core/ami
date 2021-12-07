@@ -11,8 +11,10 @@
 
 RVTEST_CODE_BEGIN
 
-  li x5, -1
-  sw zero, 0(x5)
+  la t0, trap_vector
+  li t1, -1
+  mark 0
+  sw zero, 0(t1)
   emm 1f
   nop
 
