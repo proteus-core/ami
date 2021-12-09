@@ -44,8 +44,16 @@ RVTEST_CODE_BEGIN
 2:
   nop
 
-  # 5. Test nested if-then-else
-  # TODO
+  # Mark 4. Test nested activating branch
+  a.beq x0, x0, 1f
+  mark 4
+  nop
+  a.beq x0, x0, 2f
+  nop
+2:
+  nop
+1:
+  nop
 
   TEST_PASSFAIL
 
