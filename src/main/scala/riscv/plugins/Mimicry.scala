@@ -96,7 +96,8 @@ class Mimicry() extends Plugin[Pipeline] {
         // Activating control-flow
         Data.AJUMP   -> False,
         Data.ABRANCH -> False,
-        Data.OUTCOME -> False
+        Data.OUTCOME -> False,
+        Data.MMEXIT  -> U(CSR_MMADDR_NONE)
       ))
 
       val stage = pipeline.retirementStage
@@ -147,7 +148,8 @@ class Mimicry() extends Plugin[Pipeline] {
         case JumpType.Normal =>
           when (stage.value(Data.ABRANCH)) {
             pipeline.getService[JumpService].disableJump(stage)
-            // TODO: Get rid of Data.OUTCOME (redundant with Data.MMEXIT)
+            // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
+            //         (redundant with Data.MMEXIT)
             stage.output(Data.OUTCOME) := True
             stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
           }
@@ -191,7 +193,7 @@ class Mimicry() extends Plugin[Pipeline] {
             mmstat.write(mmstatNew)
           }
 
-          // 1.1) Are we dealing with an activating branch?
+          // 1.2) Are we dealing with an activating branch?
           when (value(Data.ABRANCH) && value(Data.OUTCOME)) {
             mmentry.write(PC)
             mmexit.write(value(Data.MMEXIT))
@@ -221,7 +223,7 @@ class Mimicry() extends Plugin[Pipeline] {
           mmstat.write(mmstatNew)
         }
 
-        // 4) Do we need to mimic execution?
+        // 4) Do we need to mimic the execution?
         when (value(Data.MIMIC)) {
           output(pipeline.data.RD_TYPE) := RegisterType.NONE
         }

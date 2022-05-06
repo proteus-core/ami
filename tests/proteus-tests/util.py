@@ -92,7 +92,7 @@ def llvm_disassemble(bytez):
 
 ###########################################################################
 def llvm_disassemble_mc(bytez):
-  mc  = "/home/hans/devel/morpheus/llvm-project/install/bin/llvm-mc"
+  mc  = "/home/hans/kul/phd/morpheus/llvm-project/install/bin/llvm-mc"
   mc += " --arch=riscv32"
   mc += " --mdis"
 
@@ -109,8 +109,8 @@ def llvm_disassemble_mc(bytez):
 def disassemble(bytez):
   assert len(bytez) == 4
   #esult = gnu_disassemble(bytez)
-  result = llvm_disassemble(bytez)
-  #esult = llvm_disassemble_mc(bytez)
+  #esult = llvm_disassemble(bytez)
+  result = llvm_disassemble_mc(bytez)
   if result.find("unknown") > 0:
     result = bytez.hex()
   return result
