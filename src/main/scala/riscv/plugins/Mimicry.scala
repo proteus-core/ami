@@ -122,6 +122,12 @@ class Mimicry() extends Plugin[Pipeline] {
             is(2) { 
               stage.output(Data.PERSISTENT) := True 
             }
+            is(3) {
+              when (isJump(result)) {
+                // Jumps are implicitly persistent, i.e., rd is always written
+                stage.output(Data.PERSISTENT) := True
+              }
+            }
           }
         }
 
