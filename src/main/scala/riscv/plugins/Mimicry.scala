@@ -81,12 +81,12 @@ class Mimicry() extends Plugin[Pipeline] {
 
   override def setup(): Unit = {
 
-    val csrService = pipeline.getService[CsrService]
+    val csrService = pipeline.service[CsrService]
     csrService.registerCsr(CSR_MMSTAT, new MmStat)
     csrService.registerCsr(CSR_MMENTRY, new MmEntry)
     csrService.registerCsr(CSR_MMEXIT , new MmExit)
 
-    pipeline.getService[DecoderService].configure { config =>
+    pipeline.service[DecoderService].configure { config =>
       config.addDefault(Map(
         // Mimic execution
         Data.GHOST      -> False,
@@ -135,7 +135,7 @@ class Mimicry() extends Plugin[Pipeline] {
       })
     }
 
-    pipeline.getService[JumpService].onJump { (stage, _, _, jumpType) =>
+    pipeline.service[JumpService].onJump { (stage, _, _, jumpType) =>
 
       val mmstat = Utils.outsideConditionScope(slave(new CsrIo))
       val mmstatCur = mmstat.read()
@@ -153,7 +153,7 @@ class Mimicry() extends Plugin[Pipeline] {
           mmstat.write(mmstatNew)
         case JumpType.Normal =>
           when (stage.value(Data.ABRANCH)) {
-            pipeline.getService[JumpService].disableJump(stage)
+            pipeline.service[JumpService].disableJump(stage)
             // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
             //         (redundant with Data.MMEXIT)
             stage.output(Data.OUTCOME) := True
@@ -162,7 +162,7 @@ class Mimicry() extends Plugin[Pipeline] {
       }
 
       pipeline plug new Area {
-        val csrService = pipeline.getService[CsrService]
+        val csrService = pipeline.service[CsrService]
         mmstat <> csrService.getCsr(CSR_MMSTAT)
       }
     }
@@ -247,7 +247,7 @@ class Mimicry() extends Plugin[Pipeline] {
     }
 
     pipeline plug new Area {
-      val csrService = pipeline.getService[CsrService]
+      val csrService = pipeline.service[CsrService]
       mimicryArea.mmstat  <> csrService.getCsr(CSR_MMSTAT)
       mimicryArea.mmentry <> csrService.getCsr(CSR_MMENTRY)
       mimicryArea.mmexit  <> csrService.getCsr(CSR_MMEXIT)

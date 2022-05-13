@@ -14,7 +14,7 @@ class Marker() extends Plugin[Pipeline] {
   }
 
   override def setup(): Unit = {
-    pipeline.getService[DecoderService].configure { config =>
+    pipeline.service[DecoderService].configure { config =>
       config.addDefault(Map(
         Data.MARK -> False
       ))
