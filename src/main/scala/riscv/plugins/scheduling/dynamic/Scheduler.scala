@@ -10,13 +10,14 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
   }
 
   override def setup(): Unit = {
-    pipeline.getService[DecoderService].configure { config =>
+    pipeline.service[DecoderService].configure { config =>
       config.addDefault(PrivateRegisters.DEST_FU, B(0))
     }
   }
 
   override def finish(): Unit = {
     pipeline plug new Area {
+      val cdbBMetaData = new DynBundle[PipelineData[spinal.core.Data]]
       val registerBundle = new DynBundle[PipelineData[spinal.core.Data]]
 
       val ret = pipeline.retirementStage
@@ -25,22 +26,22 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
         registerBundle.addElement(register, register.dataType)
       }
 
-      pipeline.rob = new ReorderBuffer(pipeline, 16, registerBundle)
+      pipeline.rob = new ReorderBuffer(pipeline, 16, registerBundle, cdbBMetaData)
 
       val rob = pipeline.rob
       rob.build()
 
       val reservationStations = pipeline.rsStages.map(
-        stage => new ReservationStation(stage, rob, pipeline, registerBundle))
+        stage => new ReservationStation(stage, rob, pipeline, registerBundle, cdbBMetaData))
 
-      val cdb = new CommonDataBus(reservationStations, rob)
+      val cdb = new CommonDataBus(reservationStations, rob, cdbBMetaData)
       cdb.build()
       for ((rs, index) <- reservationStations.zipWithIndex) {
         rs.build()
         rs.cdbStream >> cdb.inputs(index)
       }
 
-      val loadManager = new LoadManager(pipeline, pipeline.loadStage, rob, registerBundle)
+      val loadManager = new LoadManager(pipeline, pipeline.loadStage, rob, registerBundle, cdbBMetaData)
       loadManager.build()
       loadManager.cdbStream >> cdb.inputs(reservationStations.size)
 
@@ -90,7 +91,7 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
         s"Stage ${stage.stageName} is not an execute stage")
     }
 
-    pipeline.getService[DecoderService].configure { config =>
+    pipeline.service[DecoderService].configure { config =>
       var fuMask = 0
 
       for (exeStage <- pipeline.rsStages.reverse) {

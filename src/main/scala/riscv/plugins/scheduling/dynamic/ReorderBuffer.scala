@@ -2,13 +2,7 @@ package riscv.plugins.scheduling.dynamic
 
 import riscv._
 import spinal.core._
-import spinal.lib.Counter
-
-case class RdbMessage(retirementRegisters: DynBundle[PipelineData[Data]],
-                      robIndexBits: BitCount) extends Bundle {
-  val robIndex = UInt(robIndexBits)
-  val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] = retirementRegisters.createBundle
-}
+import spinal.lib.{Counter, Flow}
 
 case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]])
                    (implicit config: Config) extends Bundle {
@@ -32,7 +26,8 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]])
   */
 class ReorderBuffer(pipeline: DynamicPipeline,
                     robCapacity: Int,
-                    retirementRegisters: DynBundle[PipelineData[Data]])
+                    retirementRegisters: DynBundle[PipelineData[Data]],
+                    metaRegisters: DynBundle[PipelineData[Data]])
                    (implicit config: Config) extends Area with CdbListener {
   def capacity: Int = robCapacity
   def indexBits: BitCount = log2Up(capacity) bits
@@ -40,7 +35,8 @@ class ReorderBuffer(pipeline: DynamicPipeline,
   val robEntries = Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters).getZero))
   val oldestIndex = Counter(capacity)
   val newestIndex = Counter(capacity)
-  private val isFull = RegInit(False)
+  private val isFullNext = Bool()
+  private val isFull = RegNext(isFullNext).init(False)
   private val willRetire = False
   val isAvailable = !isFull || willRetire
 
@@ -57,14 +53,22 @@ class ReorderBuffer(pipeline: DynamicPipeline,
 
   def isValidAbsoluteIndex(index: UInt): Bool = {
     val ret = Bool()
-    when ((oldestIndex.value === newestIndex.value && !isFull) || index >= capacity) { // initial setting
+
+    val oldest = UInt(indexBits)
+    val newest = UInt(indexBits)
+    oldest := oldestIndex.value
+    newest := newestIndex.value
+
+    when (index >= capacity) {
       ret := False
-    } elsewhen (oldestIndex.value === newestIndex.value) { // rob is full
+    } elsewhen (isFull) {
       ret := True
-    } elsewhen (newestIndex.value > oldestIndex.value) { // normal order
-      ret := index >= oldestIndex.value && index < newestIndex.value
+    } elsewhen (oldest === newest && !isFull) {  // empty
+      ret := False
+    } elsewhen (newest > oldest) { // normal order
+      ret := index >= oldest && index < newest
     } otherwise { // wrapping
-      ret := index >= oldestIndex.value || index < newestIndex.value
+      ret := index >= oldest || index < newest
     }
     ret
   }
@@ -83,9 +87,11 @@ class ReorderBuffer(pipeline: DynamicPipeline,
   def absoluteIndexForRelative(relative: UInt): UInt = {
     val absolute = UInt(32 bits)
     val adjusted = UInt(32 bits)
-    absolute := (relative + oldestIndex.value).resized
+    val oldestResized = UInt(32 bits)
+    oldestResized := oldestIndex.value.resized
+    absolute := oldestResized + relative
     when (absolute >= capacity) {
-      adjusted := (absolute - capacity).resized
+      adjusted := absolute - capacity
     } otherwise {
       adjusted := absolute
     }
@@ -99,8 +105,8 @@ class ReorderBuffer(pipeline: DynamicPipeline,
     pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := pc
     pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := rd
     pushedEntry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]) := rdType
-    pipeline.getService[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
-    pipeline.getService[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
+    pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
+    pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
     newestIndex.value
   }
 
@@ -109,15 +115,13 @@ class ReorderBuffer(pipeline: DynamicPipeline,
     robEntries(cdbMessage.robIndex).registerMap.element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
   }
 
-  def getValue(regId: UInt): (Bool, Bool, UInt, UInt) = {
+  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage]) = {
     val found = Bool()
-    val ready = Bool()
-    val value = UInt(config.xlen bits)
-    val ix = UInt(indexBits)
+    val target = Flow(CdbMessage(metaRegisters, indexBits))
+    target.valid := False
+    target.payload.robIndex := 0
+    target.payload.writeValue := 0
     found := False
-    ready := False
-    value := 0
-    ix := 0
 
     // loop through valid values and return the freshest if present
     for (relative <- 0 until capacity) {
@@ -131,15 +135,15 @@ class ReorderBuffer(pipeline: DynamicPipeline,
         && regId =/= 0
         && entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]) === RegisterType.GPR) {
         found := True
-        ready := entry.hasValue
-        value := entry.registerMap.elementAs[UInt](pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]])
-        ix := absolute
+        target.valid := entry.hasValue
+        target.robIndex := absolute
+        target.writeValue := entry.registerMap.elementAs[UInt](pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]])
       }
     }
-    (found, ready, value, ix)
+    (found, target)
   }
 
-  def hasPendingStore(robIndex: UInt, address: UInt): Bool = {
+  def hasPendingStoreForEntry(robIndex: UInt, address: UInt): Bool = {
     val found = Bool()
     found := False
 
@@ -150,7 +154,7 @@ class ReorderBuffer(pipeline: DynamicPipeline,
       val index = UInt(indexBits)
       index := nth
 
-      val lsuService = pipeline.getService[LsuService]
+      val lsuService = pipeline.service[LsuService]
       val entryIsStore = lsuService.operationOfBundle(entry.registerMap) === LsuOperationType.STORE
       val entryAddressValid = lsuService.addressValidOfBundle(entry.registerMap)
       val entryAddress = lsuService.addressOfBundle(entry.registerMap)
@@ -171,14 +175,15 @@ class ReorderBuffer(pipeline: DynamicPipeline,
   def onRdbMessage(rdbMessage: RdbMessage): Unit = {
     robEntries(rdbMessage.robIndex).registerMap := rdbMessage.registerMap
 
-    when (pipeline.getService[CsrService].isCsrInstruction(rdbMessage.registerMap)) {
-      pipeline.getService[JumpService].jumpOfBundle(robEntries(rdbMessage.robIndex).registerMap) := True
+    when (pipeline.service[CsrService].isCsrInstruction(rdbMessage.registerMap)) {
+      pipeline.service[JumpService].jumpOfBundle(robEntries(rdbMessage.robIndex).registerMap) := True
     }
 
     robEntries(rdbMessage.robIndex).ready := True
   }
 
   def build(): Unit = {
+    isFullNext := isFull
     val oldestEntry = robEntries(oldestIndex.value)
     val updatedOldestIndex = UInt(indexBits)
     updatedOldestIndex := oldestIndex.value
@@ -205,7 +210,7 @@ class ReorderBuffer(pipeline: DynamicPipeline,
       updatedOldestIndex := oldestIndex.valueNext
       oldestIndex.increment()
       willRetire := True
-      isFull := False
+      isFullNext := False
     }
 
     when (pushInCycle) {
@@ -213,7 +218,7 @@ class ReorderBuffer(pipeline: DynamicPipeline,
       val updatedNewest = newestIndex.valueNext
       newestIndex.increment()
       when (updatedOldestIndex === updatedNewest) {
-        isFull := True
+        isFullNext := True
       }
     }
   }
