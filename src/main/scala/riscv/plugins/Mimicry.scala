@@ -186,6 +186,7 @@ class Mimicry() extends Plugin[Pipeline] {
         val mmstatNew = UInt(config.xlen bits)
         val depth     = mmstatCur(CSR_MMSTAT_DEPTH)
         val PC        = value(pipeline.data.PC)
+        val reactivation = False
 
         mmstatNew := mmstatCur
 
@@ -196,6 +197,7 @@ class Mimicry() extends Plugin[Pipeline] {
 
           // 1.1) Are we dealing with an activating jump?
           when (value(Data.AJUMP)) {
+            reactivation := True
             mmentry.write(PC)
             mmexit.write(PC+4)
             mmstatNew(CSR_MMSTAT_DEPTH) := 1
@@ -204,6 +206,7 @@ class Mimicry() extends Plugin[Pipeline] {
 
           // 1.2) Are we dealing with an activating branch?
           when (value(Data.ABRANCH) && value(Data.OUTCOME)) {
+            reactivation := True
             mmentry.write(PC)
             mmexit.write(value(Data.MMEXIT))
             mmstatNew(CSR_MMSTAT_DEPTH) := 1
@@ -219,18 +222,16 @@ class Mimicry() extends Plugin[Pipeline] {
         }
 
         // 3) Is the current program counter registered as the exit address?
-        when (! value(Data.AJUMP)) {
-          when (! (value(Data.ABRANCH) && value(Data.OUTCOME))) {
-            when (PC === mmexit.read()) {
-              when (depth === 1) {
-                // We are exiting mimicry mode
-                mmentry.write(CSR_MMADDR_NONE)
-                mmexit.write(CSR_MMADDR_NONE)
-              }
-              // TODO: assert depth > 0
-              mmstatNew(CSR_MMSTAT_DEPTH) := depth - 1 // Update recursion depth
-              mmstat.write(mmstatNew)
+        when (! reactivation) {
+          when (PC === mmexit.read()) {
+            when (depth === 1) {
+               // We are exiting mimicry mode
+               mmentry.write(CSR_MMADDR_NONE)
+               mmexit.write(CSR_MMADDR_NONE)
             }
+            // TODO: assert depth > 0
+            mmstatNew(CSR_MMSTAT_DEPTH) := depth - 1 // Update recursion depth
+            mmstat.write(mmstatNew)
           }
         }
 
