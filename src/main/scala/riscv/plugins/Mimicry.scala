@@ -186,10 +186,13 @@ class Mimicry() extends Plugin[Pipeline] {
         val mmstatNew = UInt(config.xlen bits)
         val depth     = mmstatCur(CSR_MMSTAT_DEPTH)
         val PC        = value(pipeline.data.PC)
+
         mmstatNew := mmstatCur
 
+        val isExit = (depth === 1) && (PC === mmexit.read())
+
         // 1) Is mimicry mode disabled?
-        when (depth === 0) {
+        when ((depth === 0) || isExit) {
 
           // 1.1) Are we dealing with an activating jump?
           when (value(Data.AJUMP)) {
@@ -215,18 +218,20 @@ class Mimicry() extends Plugin[Pipeline] {
           mmstat.write(mmstatNew)
         }
 
-        val isExit = (depth === 1) && (PC === mmexit.read())
-
         // 3) Is the current program counter registered as the exit address?
-        when (PC === mmexit.read()) {
-          when (depth === 1) {
-            // We are exiting mimicry mode
-            mmentry.write(CSR_MMADDR_NONE)
-            mmexit.write(CSR_MMADDR_NONE)
+        when (! value(Data.AJUMP)) {
+          when (! (value(Data.ABRANCH) && value(Data.OUTCOME))) {
+            when (PC === mmexit.read()) {
+              when (depth === 1) {
+                // We are exiting mimicry mode
+                mmentry.write(CSR_MMADDR_NONE)
+                mmexit.write(CSR_MMADDR_NONE)
+              }
+              // TODO: assert depth > 0
+              mmstatNew(CSR_MMSTAT_DEPTH) := depth - 1 // Update recursion depth
+              mmstat.write(mmstatNew)
+            }
           }
-          // TODO: assert depth > 0
-          mmstatNew(CSR_MMSTAT_DEPTH) := depth - 1 // Update recursion depth
-          mmstat.write(mmstatNew)
         }
 
         // 4) Do we need to mimic the execution?
