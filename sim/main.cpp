@@ -84,6 +84,19 @@ public:
         }
     }
 
+    void dump(const char* fname)
+    {
+      std::fstream fs;
+      fs.open (fname, std::fstream::out | std::fstream::binary);
+
+      for(const auto& word: memory_) {
+        const char *bytes = reinterpret_cast<const char *>(&word);
+        fs.write(bytes, sizeof(word));
+      }
+
+      fs.close();
+    }
+
 private:
 
     using Address = std::uint32_t;
@@ -347,5 +360,6 @@ int main(int argc, char** argv)
     }
 
     tracer->close();
+    memory.dump("sim.mem");
     return result;
 }
