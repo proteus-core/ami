@@ -4,6 +4,10 @@ import riscv._
 import spinal.core._
 import spinal.lib.slave
 
+object MimicryRegisterType {
+  val MIMIC_GPR = RegisterType.newElement("MIMIC_GPR")
+}
+
 class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
 
   override def getImplementedExtensions = Seq('X')
@@ -263,16 +267,16 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
 
         // 4) Do we need to mimic the execution?
         when (value(Data.MIMIC)) {
-          output(pipeline.data.RD_TYPE) := RegisterType.NONE
+          output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
         }
 
         when (value(Data.GHOST)) {
           when ((depth === 0) || isExit) {
-            output(pipeline.data.RD_TYPE) := RegisterType.NONE
+            output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
           }
         } elsewhen (!value(Data.PERSISTENT)) {
           when ((depth > 0) && (! isExit)) {
-            output(pipeline.data.RD_TYPE) := RegisterType.NONE
+            output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
           }
         }
       }
@@ -350,6 +354,43 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
 
       // We never need to stall.
       False
+    })
+
+    pipeline.service[DataHazardService].resolveHazard((stage, nextStages) => {
+      val stall = False
+
+      def mimicStall(rsNeeded: Bool, rs: PipelineData[UInt],
+                     rsType: PipelineData[SpinalEnumCraft[RegisterType.type]]): Unit = {
+        if (stage.hasInput(rs)) {
+          val readRs = stage.input(rs)
+
+          when (rsNeeded && readRs =/= 0) {
+            val readRegType = stage.input(rsType)
+            val readMimicGpr = readRegType === MimicryRegisterType.MIMIC_GPR
+
+            for (laterStage <- nextStages.reverse) {
+              val writeRd = laterStage.input(pipeline.data.RD)
+              val writeRegType = laterStage.input(pipeline.data.RD_TYPE)
+              val writeNone = writeRegType === RegisterType.NONE
+              val writeMimicGpr = writeRegType === MimicryRegisterType.MIMIC_GPR
+
+              // We only need to check for additional stalls if either the register read or the
+              // register write is mimicked (or both). Otherwise, we either dealing with normal
+              // GPR-GPR dependencies which are handled by the data hazard resolver.
+              val checkStall = (readRs === writeRd) && !writeNone && (writeMimicGpr || readMimicGpr)
+
+              when (laterStage.arbitration.isValid && checkStall) {
+                stall := !laterStage.input(pipeline.data.RD_DATA_VALID)
+              }
+            }
+          }
+        }
+      }
+
+      mimicStall(stage.arbitration.rs1Needed, pipeline.data.RS1, pipeline.data.RS1_TYPE)
+      mimicStall(stage.arbitration.rs2Needed, pipeline.data.RS2, pipeline.data.RS2_TYPE)
+
+      stall
     })
   }
 }

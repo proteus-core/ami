@@ -10,7 +10,7 @@ class emm(MimicryTest.MimicryTest):
     mark = vcd.get_mark()
     t = mark.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(vcd.as_int(vcd.PL.writeback_out_RD_TYPE, t), 0)
+    self.assertEqual(vcd.as_int(vcd.PL.writeback_out_RD_TYPE, t), MimicryTest.MIMIC_REG_TYPE)
     tn =  vcd.nextt(t)
     self.assertEqual(self.mm_entry(vcd, tn), mark.addr-8)
     self.assertEqual(self.mm_exit(vcd, tn), mark.addr+4)

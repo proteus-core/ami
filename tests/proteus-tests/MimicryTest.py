@@ -1,5 +1,7 @@
 import ProteusTest
 
+MIMIC_REG_TYPE = 2
+
 """
 Helper class for mimicry mode regression tests
 """
