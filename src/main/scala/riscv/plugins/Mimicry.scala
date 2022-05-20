@@ -20,7 +20,7 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     (ir === Opcodes.JAL)  ||
     (ir === Opcodes.JALR)
   }
-  
+
   def isConditional(ir: UInt): Bool = {
     (ir === Opcodes.BEQ)  ||
     (ir === Opcodes.BNE)  ||
@@ -116,20 +116,20 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
 
         when (ir =/= 0) {
           switch (ir(1 downto 0)) {
-            is(0) { 
-              stage.output(Data.GHOST) := True 
+            is(0) {
+              stage.output(Data.GHOST) := True
             }
-            is(1) { 
+            is(1) {
               when (isJump(result)) {
                 stage.output(Data.AJUMP) := True
               } elsewhen (isConditional(result)) {
                 stage.output(Data.ABRANCH) := True
               } otherwise {
-                stage.output(Data.MIMIC) := True 
+                stage.output(Data.MIMIC) := True
               }
             }
-            is(2) { 
-              stage.output(Data.PERSISTENT) := True 
+            is(2) {
+              stage.output(Data.PERSISTENT) := True
             }
             is(3) {
               when (isJump(result)) {
