@@ -55,7 +55,7 @@ object createStaticPipeline {
       new TrapStageInvalidator,
       new Interrupts(pipeline.writeback),
       new MulDiv(Set(pipeline.execute)),
-      new Mimicry,
+      new Mimicry(pipeline.execute),
       new Marker
     ) ++ extraPlugins)
 
