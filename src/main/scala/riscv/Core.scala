@@ -158,7 +158,7 @@ object CoreTestSim {
 
 object CoreExtMem {
   def main(args: Array[String]) {
-    SpinalVerilog(SoC.static(RamType.ExternalAxi4(10 MiB), 32))
+    SpinalVerilog(SoC.static(RamType.ExternalAxi4(10 MiB)))
   }
 }
 
