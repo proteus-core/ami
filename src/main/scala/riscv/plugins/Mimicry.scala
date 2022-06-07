@@ -180,6 +180,12 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
       }
     }
 
+    pipeline.service[BranchService].onBranch { (stage, _, taken) =>
+      when (!taken && !stage.value(Data.ABRANCH)) {
+        stage.arbitration.jumpRequested := True
+      }
+    }
+
     // Since the CSR forwarding logic only accesses these WB output in the finish() phase, they are
     // not automatically routed (because the routing uses the information available *before*
     // finish()). Therefore, we have to manually inform the router that these outputs will be
