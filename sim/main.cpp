@@ -23,8 +23,9 @@ const std::uint64_t MAX_CYCLES = 1000000000ULL;
 
 const std::size_t CACHE_LINE_SIZE = 64;   // bytes
 const std::size_t DL1_SIZE        = 1024; // bytes
-const vluint64_t  DL1_LATENCY     = 1;    // cycles
-const vluint64_t  MEMORY_LATENCY  = 1;    // cycles
+const vluint64_t  DL1_LATENCY     = 0;    // cycles
+const vluint64_t  MEMORY_LATENCY  = 0;    // cycles
+const vluint64_t  AXI_LATENCY     = 1;    // cycles
 
 class Memory
 {
@@ -86,8 +87,10 @@ public:
             else
             {
                 auto address = top_.io_axi_arw_payload_addr;
-                auto delay = 
-                  isDL1Cached(address) ? DL1_LATENCY : MEMORY_LATENCY;
+                auto delay = AXI_LATENCY +
+                  (isDL1Cached(address) ? DL1_LATENCY : MEMORY_LATENCY);
+
+                assert(delay > 0 && "Invalid delay");
 
                 nextReadWord_ = read(address);
                 nextReadCycle_ = cycle + delay;
@@ -135,7 +138,9 @@ private:
 
     void addToCache(Address address)
     {
-      dL1_[address] = address;
+      auto index = address % DL1_SIZE;
+
+      dL1_[index] = address;
     }
 
     Word read(Address address)
