@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <unordered_map>
 
 #include <cstdint>
 #include <cassert>
@@ -19,6 +20,11 @@ const int    CLOCK_FREQUENCY = 100*1e6;
 const int    CLOCK_PERIOD    = 1/(CLOCK_FREQUENCY*TIMESCALE);
 
 const std::uint64_t MAX_CYCLES = 1000000000ULL;
+
+const std::size_t CACHE_LINE_SIZE = 64;   // bytes
+const std::size_t DL1_SIZE        = 1024; // bytes
+const vluint64_t  DL1_LATENCY     = 1;    // cycles
+const vluint64_t  MEMORY_LATENCY  = 1;    // cycles
 
 class Memory
 {
@@ -45,6 +51,8 @@ public:
             auto word = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
             memory_.push_back(word);
         }
+
+        codeSize_ = memoryBytes.size();
     }
 
     void eval(vluint64_t cycle)
@@ -77,8 +85,12 @@ public:
             }
             else
             {
-                nextReadWord_ = read(top_.io_axi_arw_payload_addr);
-                nextReadCycle_ = cycle + 1;
+                auto address = top_.io_axi_arw_payload_addr;
+                auto delay = 
+                  isDL1Cached(address) ? DL1_LATENCY : MEMORY_LATENCY;
+
+                nextReadWord_ = read(address);
+                nextReadCycle_ = cycle + delay;
                 nextReadId_ = top_.io_axi_arw_payload_id;
             }
         }
@@ -89,7 +101,8 @@ public:
       std::fstream fs;
       fs.open (fname, std::fstream::out | std::fstream::binary);
 
-      for(const auto& word: memory_) {
+      for(const auto& word: memory_)
+      {
         const char *bytes = reinterpret_cast<const char *>(&word);
         fs.write(bytes, sizeof(word));
       }
@@ -103,9 +116,33 @@ private:
     using Word = std::uint32_t;
     using Mask = std::uint8_t;
 
+    bool isDataAddress(Address address)
+    {
+      // TODO: Implement me (return address > codeSize_)
+      return true;
+    }
+
+    bool isDL1Cached(Address address)
+    {
+      auto index = address % DL1_SIZE;
+      auto entry = dL1_.find(index);
+
+      if (entry == dL1_.end())
+        return false;
+
+      return entry->second == address; 
+    }
+
+    void addToCache(Address address)
+    {
+      dL1_[address] = address;
+    }
+
     Word read(Address address)
     {
         ensureEnoughMemory(address);
+        for (int i=0; i<CACHE_LINE_SIZE; i++)
+          addToCache(address+i);
         return memory_[(address >> 2)];
     }
 
@@ -122,6 +159,8 @@ private:
         auto& memoryValue = memory_[(address >> 2)];
         memoryValue &= ~bitMask;
         memoryValue |= value & bitMask;
+
+        addToCache(address);
     }
 
     void ensureEnoughMemory(Address address)
@@ -140,6 +179,8 @@ private:
     Word nextReadWord_;
     vluint64_t nextReadCycle_ = 0;
     vluint8_t nextReadId_;
+    std::size_t codeSize_;
+    std::unordered_map<Address, Address> dL1_;
 };
 
 class CharDev
