@@ -7,6 +7,8 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <unordered_map>
+#include <queue>
 
 #include <cstdint>
 #include <cassert>
@@ -14,11 +16,37 @@
 #include <sys/select.h>
 #include <sys/time.h>
 
+using Word = std::uint32_t;
+
 const double TIMESCALE       = 1e-9;
 const int    CLOCK_FREQUENCY = 100*1e6;
 const int    CLOCK_PERIOD    = 1/(CLOCK_FREQUENCY*TIMESCALE);
 
 const std::uint64_t MAX_CYCLES = 1000000000ULL;
+
+const std::size_t DL1_CACHE_LINE_MASK = 0x3f;
+const std::size_t DL1_CACHE_LINE_SIZE = 64;    // bytes
+const std::size_t DL1_SIZE            = 4;  // bytes
+const vluint64_t  DL1_LATENCY         = 0;     // cycles
+
+const vluint64_t  DMEM_LATENCY = 0;     // cycles
+const vluint64_t  IMEM_LATENCY = 0;     // cycles
+
+const vluint64_t  AXI_LATENCY = 1;     // cycles
+
+struct ReadWord
+{
+  Word nextReadWord_;
+  vluint64_t nextReadCycle_;
+  vluint8_t nextReadId_;
+
+#if 0
+  // Required for min priority queue
+  friend bool operator< (ReadWord const& lhs, ReadWord const& rhs) {
+    return lhs.nextReadCycle_ > rhs.nextReadCycle_;
+  }
+#endif
+};
 
 class Memory
 {
@@ -45,6 +73,8 @@ public:
             auto word = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
             memory_.push_back(word);
         }
+
+        codeSize_ = memoryBytes.size();
     }
 
     void eval(vluint64_t cycle)
@@ -54,15 +84,25 @@ public:
         top_.io_axi_r_valid = false;
         top_.io_axi_b_valid = false;
 
-        if (nextReadCycle_ == cycle)
+        if (!readQ_.empty())
         {
-            top_.io_axi_r_payload_data = nextReadWord_;
-            top_.io_axi_r_payload_id = nextReadId_;
+          ReadWord rw = readQ_.front();
+          if (rw.nextReadCycle_ <= cycle)
+          {
+            readQ_.pop();
+
+#if 0
+            std::cout << "DATA=" << std::hex << rw.nextReadWord_ << std::endl;
+#endif
+
+            top_.io_axi_r_payload_data = rw.nextReadWord_;
+            top_.io_axi_r_payload_id = rw.nextReadId_;
             top_.io_axi_r_payload_last = true;
             top_.io_axi_r_valid = true;
-            nextReadCycle_ = 0;
+            rw.nextReadCycle_ = 0;
 
             assert(top_.io_axi_r_ready);
+          }
         }
 
         if (top_.io_axi_arw_valid)
@@ -77,9 +117,27 @@ public:
             }
             else
             {
-                nextReadWord_ = read(top_.io_axi_arw_payload_addr);
-                nextReadCycle_ = cycle + 1;
-                nextReadId_ = top_.io_axi_arw_payload_id;
+                auto address = top_.io_axi_arw_payload_addr;
+                auto latency = getLatency(address);
+
+                assert(latency > 0 && "Invalid latency");
+
+#if 0
+                std::cout << "ADDR=" << std::hex << address;
+                std::cout << " TYPE=";
+                std::cout << (isDataAddress(address) ? "DATA" : "CODE");
+                std::cout << " LATENCY=" << latency;
+                std::cout << std::endl;
+
+#endif
+
+                ReadWord rw;
+
+                rw.nextReadWord_ = read(address);
+                rw.nextReadCycle_ = cycle + latency;
+                rw.nextReadId_ = top_.io_axi_arw_payload_id;
+
+                readQ_.push(rw);
             }
         }
     }
@@ -89,7 +147,8 @@ public:
       std::fstream fs;
       fs.open (fname, std::fstream::out | std::fstream::binary);
 
-      for(const auto& word: memory_) {
+      for(const auto& word: memory_)
+      {
         const char *bytes = reinterpret_cast<const char *>(&word);
         fs.write(bytes, sizeof(word));
       }
@@ -100,12 +159,36 @@ public:
 private:
 
     using Address = std::uint32_t;
-    using Word = std::uint32_t;
     using Mask = std::uint8_t;
+
+    bool isDataAddress(Address address)
+    {
+        return ((address >> 2) > codeSize_);
+    }
+
+    Address dL1Index(Address address)
+    {
+        return address % DL1_SIZE;
+    }
+
+    void addToCache(Address address)
+    {
+        if (isDataAddress(address))
+        {
+            auto index = dL1Index(address);
+
+            dL1_[index] = address;
+        }
+    }
 
     Word read(Address address)
     {
         ensureEnoughMemory(address);
+
+        Address addr = address & ~(DL1_CACHE_LINE_MASK);
+        for (int i=0; i<DL1_CACHE_LINE_SIZE; i++)
+          addToCache(addr+i);
+
         return memory_[(address >> 2)];
     }
 
@@ -122,6 +205,8 @@ private:
         auto& memoryValue = memory_[(address >> 2)];
         memoryValue &= ~bitMask;
         memoryValue |= value & bitMask;
+
+        addToCache(address);
     }
 
     void ensureEnoughMemory(Address address)
@@ -135,11 +220,43 @@ private:
         }
     }
 
+    bool isDL1Cached(Address address)
+    {
+        if (!isDataAddress(address))
+            return false;
+
+        auto index = dL1Index(address);
+        auto entry = dL1_.find(index);
+
+        if (entry == dL1_.end())
+            return false;
+
+        return entry->second == address; 
+    }
+
+    vluint64_t getLatency(Address address)
+    {
+        vluint64_t extraDelay = 0;
+
+        if (isDataAddress(address))
+        {
+            extraDelay = DMEM_LATENCY;
+            if (isDL1Cached(address))
+                extraDelay = DL1_LATENCY;
+        }
+        else 
+        {
+            extraDelay = IMEM_LATENCY;
+        }
+
+        return AXI_LATENCY + extraDelay;
+    }
+
     VCore& top_;
     std::vector<Word> memory_;
-    Word nextReadWord_;
-    vluint64_t nextReadCycle_ = 0;
-    vluint8_t nextReadId_;
+    std::size_t codeSize_;
+    std::unordered_map<Address, Address> dL1_;
+    std::queue<ReadWord> readQ_; // TODO: Use queue per id
 };
 
 class CharDev
