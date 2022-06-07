@@ -323,6 +323,18 @@ trait JumpService {
   def jumpOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): Bool
 }
 
+trait BranchService {
+  type BranchObserver = (Stage, UInt, Bool) => Unit
+
+  /**
+   * Register a callback to be called whenever a conditional branch is executed.
+   * The parameters passed to `observer` are 1) the stage that caused the update, 2) the target PC
+   * if the branch would be taken, and 3) whether the branch is taken.. It is called on the context
+   * of the passed stage.
+   */
+  def onBranch(observer: BranchObserver): Unit
+}
+
 trait BranchTargetPredictorService {
   def predictedPc(stage: Stage): UInt
   def setPredictedPc(stage: Stage, pc: UInt): Unit
