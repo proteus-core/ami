@@ -87,13 +87,10 @@ public:
             else
             {
                 auto address = top_.io_axi_arw_payload_addr;
-                auto delay = AXI_LATENCY +
-                  (isDL1Cached(address) ? DL1_LATENCY : MEMORY_LATENCY);
-
-                assert(delay > 0 && "Invalid delay");
+                auto latency = getLatency(address);
 
                 nextReadWord_ = read(address);
-                nextReadCycle_ = cycle + delay;
+                nextReadCycle_ = cycle + latency;
                 nextReadId_ = top_.io_axi_arw_payload_id;
             }
         }
@@ -125,30 +122,31 @@ private:
       return true;
     }
 
-    bool isDL1Cached(Address address)
+    Address dL1Index(Address address)
     {
-      auto index = address % DL1_SIZE;
-      auto entry = dL1_.find(index);
-
-      if (entry == dL1_.end())
-        return false;
-
-      return entry->second == address; 
+      return address % DL1_SIZE;
     }
 
     void addToCache(Address address)
     {
-      auto index = address % DL1_SIZE;
+      if (isDataAddress(address))
+      {
+        auto index = dL1Index(address);
 
-      dL1_[index] = address;
+        dL1_[index] = address;
+      }
     }
 
     Word read(Address address)
     {
         ensureEnoughMemory(address);
+
+        Address addr = address >> 2;
+
         for (int i=0; i<CACHE_LINE_SIZE; i++)
-          addToCache(address+i);
-        return memory_[(address >> 2)];
+          addToCache(addr+i);
+
+        return memory_[addr];
     }
 
     void write(Address address, Mask mask, Word value)
@@ -177,6 +175,34 @@ private:
             while ((address >> 2) >= memory_.size())
                 memory_.push_back(0xcafebabe);
         }
+    }
+
+    bool isDL1Cached(Address address)
+    {
+      if (!isDataAddress(address))
+        return false;
+
+      auto index = dL1Index(address);
+      auto entry = dL1_.find(index);
+
+      if (entry == dL1_.end())
+        return false;
+
+      return entry->second == address; 
+    }
+
+    vluint64_t getLatency(Address address)
+    {
+      auto result = MEMORY_LATENCY;
+
+      if (isDL1Cached(address))
+        result = DL1_LATENCY;
+
+      result += AXI_LATENCY;
+
+      assert(result > 0 && "Invalid latency");
+
+      return result;
     }
 
     VCore& top_;
