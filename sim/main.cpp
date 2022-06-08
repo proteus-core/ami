@@ -21,11 +21,15 @@ const int    CLOCK_PERIOD    = 1/(CLOCK_FREQUENCY*TIMESCALE);
 
 const std::uint64_t MAX_CYCLES = 1000000000ULL;
 
-const std::size_t CACHE_LINE_SIZE = 64;   // bytes
-const std::size_t DL1_SIZE        = 1024; // bytes
-const vluint64_t  DL1_LATENCY     = 0;    // cycles
-const vluint64_t  MEMORY_LATENCY  = 0;    // cycles
-const vluint64_t  AXI_LATENCY     = 1;    // cycles
+const std::size_t DL1_CACHE_LINE_MASK = 0x3f;
+const std::size_t DL1_CACHE_LINE_SIZE = 64;    // bytes
+const std::size_t DL1_SIZE            = 4;  // bytes
+const vluint64_t  DL1_LATENCY         = 0;     // cycles
+
+const vluint64_t  DMEM_LATENCY = 0;     // cycles
+const vluint64_t  IMEM_LATENCY = 0;     // cycles
+
+const vluint64_t  AXI_LATENCY = 1;     // cycles
 
 class Memory
 {
@@ -86,12 +90,24 @@ public:
             }
             else
             {
-                auto address = top_.io_axi_arw_payload_addr;
-                auto latency = getLatency(address);
+                if (nextReadCycle_ == 0)
+                {
+                    auto address = top_.io_axi_arw_payload_addr;
+                    auto latency = getLatency(address);
 
-                nextReadWord_ = read(address);
-                nextReadCycle_ = cycle + latency;
-                nextReadId_ = top_.io_axi_arw_payload_id;
+                    assert(latency > 0 && "Invalid latency");
+
+#if 0
+                    std::cout << "TYPE=";
+                    std::cout << (isDataAddress(address) ? "DATA" : "CODE");
+                    std::cout << " LATENCY=" << latency;
+                    std::cout << std::endl;
+#endif
+
+                    nextReadWord_ = read(address);
+                    nextReadCycle_ = cycle + latency;
+                    nextReadId_ = top_.io_axi_arw_payload_id;
+                }
             }
         }
     }
@@ -118,35 +134,33 @@ private:
 
     bool isDataAddress(Address address)
     {
-      // TODO: Implement me (return address > codeSize_)
-      return true;
+        return ((address >> 2) > codeSize_);
     }
 
     Address dL1Index(Address address)
     {
-      return address % DL1_SIZE;
+        return address % DL1_SIZE;
     }
 
     void addToCache(Address address)
     {
-      if (isDataAddress(address))
-      {
-        auto index = dL1Index(address);
+        if (isDataAddress(address))
+        {
+            auto index = dL1Index(address);
 
-        dL1_[index] = address;
-      }
+            dL1_[index] = address;
+        }
     }
 
     Word read(Address address)
     {
         ensureEnoughMemory(address);
 
-        Address addr = address >> 2;
-
-        for (int i=0; i<CACHE_LINE_SIZE; i++)
+        Address addr = address & ~(DL1_CACHE_LINE_MASK);
+        for (int i=0; i<DL1_CACHE_LINE_SIZE; i++)
           addToCache(addr+i);
 
-        return memory_[addr];
+        return memory_[(address >> 2)];
     }
 
     void write(Address address, Mask mask, Word value)
@@ -179,30 +193,34 @@ private:
 
     bool isDL1Cached(Address address)
     {
-      if (!isDataAddress(address))
-        return false;
+        if (!isDataAddress(address))
+            return false;
 
-      auto index = dL1Index(address);
-      auto entry = dL1_.find(index);
+        auto index = dL1Index(address);
+        auto entry = dL1_.find(index);
 
-      if (entry == dL1_.end())
-        return false;
+        if (entry == dL1_.end())
+            return false;
 
-      return entry->second == address; 
+        return entry->second == address; 
     }
 
     vluint64_t getLatency(Address address)
     {
-      auto result = MEMORY_LATENCY;
+        vluint64_t extraDelay = 0;
 
-      if (isDL1Cached(address))
-        result = DL1_LATENCY;
+        if (isDataAddress(address))
+        {
+            extraDelay = DMEM_LATENCY;
+            if (isDL1Cached(address))
+                extraDelay = DL1_LATENCY;
+        }
+        else 
+        {
+            extraDelay = IMEM_LATENCY;
+        }
 
-      result += AXI_LATENCY;
-
-      assert(result > 0 && "Invalid latency");
-
-      return result;
+        return AXI_LATENCY + extraDelay;
     }
 
     VCore& top_;
