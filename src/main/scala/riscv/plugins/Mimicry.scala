@@ -42,16 +42,19 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     object PERSISTENT extends PipelineData(Bool()) // Always execute
 
     // Activating control-flow
-    object AJUMP extends PipelineData(Bool())         // Activating jump
-    object ABRANCH extends PipelineData(Bool())       // Activating branch
-    object OUTCOME extends PipelineData(Bool())       // Branch outcome
+    object AJUMP extends PipelineData(Bool())      // Activating jump
+    object ABRANCH extends PipelineData(Bool())    // Activating branch
+    object OUTCOME extends PipelineData(Bool())    // Branch outcome
+
+    // Constant-timeness
+    object CTBRANCH extends PipelineData(Bool())    // CT conditional branch
 
     // CSR data
-    object MMEXIT extends PipelineData(UInt(32 bits)) // Mimicry exit address
-    object MMENTRY extends PipelineData(UInt(32 bits)) // Mimicry entry address
-    object MMSTAT_DEPTH extends PipelineData(UInt(16 bits))
-    object MM_WRITE_DEPTH extends PipelineData(Bool()) // Update depth?
+    object MMEXIT extends PipelineData(UInt(32 bits))   // Mimicry exit address
+    object MMENTRY extends PipelineData(UInt(32 bits))  // Mimicry entry address
+    object MM_WRITE_DEPTH extends PipelineData(Bool())  // Update depth?
     object MM_WRITE_BOUNDS extends PipelineData(Bool()) // Update entry/exit?
+    object MMSTAT_DEPTH extends PipelineData(UInt(16 bits))
   }
 
   // Mimicry mode entry
@@ -108,6 +111,9 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
         Data.ABRANCH -> False,
         Data.OUTCOME -> False,
 
+        // Constant-timeness
+        Data.CTBRANCH -> False,
+
         // CSR updates
         Data.MM_WRITE_DEPTH  -> False,
         Data.MM_WRITE_BOUNDS -> False
@@ -121,7 +127,11 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
         when (ir =/= 0) {
           switch (ir(1 downto 0)) {
             is(0) {
-              stage.output(Data.GHOST) := True
+              when (isConditional(result)) {
+                stage.output(Data.CTBRANCH) := True
+              } otherwise {
+                stage.output(Data.GHOST) := True
+              }
             }
             is(1) {
               when (isJump(result)) {
@@ -181,7 +191,7 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     }
 
     pipeline.service[BranchService].onBranch { (stage, _, taken) =>
-      when (!taken && !stage.value(Data.ABRANCH)) {
+      when (!taken && stage.value(Data.CTBRANCH)) {
         stage.arbitration.jumpRequested := True
       }
     }
