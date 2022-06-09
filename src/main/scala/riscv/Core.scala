@@ -47,7 +47,7 @@ object createStaticPipeline {
       new Lsu(Set(pipeline.memory), pipeline.memory, pipeline.memory),
       new BranchUnit(Set(pipeline.execute)),
       new PcManager(0x80000000L),
-      new BranchTargetPredictor(pipeline.fetch, pipeline.execute, 8, conf.xlen),
+      //new BranchTargetPredictor(pipeline.fetch, pipeline.execute, 8, conf.xlen),
       new CsrFile(pipeline.writeback, pipeline.writeback), // TODO: ugly
       new Timers,
       new MachineMode(pipeline.execute),
