@@ -4,7 +4,11 @@ import riscv._
 
 import spinal.core._
 
-class BranchUnit(branchStages: Set[Stage]) extends Plugin[Pipeline] {
+import collection.mutable
+
+class BranchUnit(branchStages: Set[Stage]) extends Plugin[Pipeline] with BranchService {
+  private val branchObservers = mutable.ArrayBuffer[BranchObserver]()
+
   object BranchCondition extends SpinalEnum {
     val NONE, EQ, NE, LT, GE, LTU, GEU = newElement()
   }
@@ -14,6 +18,11 @@ class BranchUnit(branchStages: Set[Stage]) extends Plugin[Pipeline] {
     object BU_WRITE_RET_ADDR_TO_RD extends PipelineData(Bool())
     object BU_IGNORE_TARGET_LSB extends PipelineData(Bool())
     object BU_CONDITION extends PipelineData(BranchCondition())
+  }
+
+
+  override def onBranch(observer: BranchObserver): Unit = {
+    branchObservers += observer
   }
 
   override def setup(): Unit = {
@@ -118,12 +127,18 @@ class BranchUnit(branchStages: Set[Stage]) extends Plugin[Pipeline] {
             arbitration.rs2Needed := True
           }
 
-          when (branchTaken && !arbitration.isStalled) {
-            jumpService.jump(stage, target)
+          when (!arbitration.isStalled) {
+            when (branchTaken) {
+              jumpService.jump(stage, target)
 
-            when (value(Data.BU_WRITE_RET_ADDR_TO_RD)) {
-              output(pipeline.data.RD_DATA) := input(pipeline.data.NEXT_PC)
-              output(pipeline.data.RD_DATA_VALID) := True
+              when (value(Data.BU_WRITE_RET_ADDR_TO_RD)) {
+                output(pipeline.data.RD_DATA) := input(pipeline.data.NEXT_PC)
+                output(pipeline.data.RD_DATA_VALID) := True
+              }
+            }
+
+            when (condition =/= BranchCondition.NONE) {
+              branchObservers.foreach(_(stage, target, branchTaken))
             }
           }
         }
