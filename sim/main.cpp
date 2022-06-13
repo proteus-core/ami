@@ -8,12 +8,15 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
+#include <queue>
 
 #include <cstdint>
 #include <cassert>
 
 #include <sys/select.h>
 #include <sys/time.h>
+
+using Word = std::uint32_t;
 
 const double TIMESCALE       = 1e-9;
 const int    CLOCK_FREQUENCY = 100*1e6;
@@ -30,6 +33,18 @@ const vluint64_t  DMEM_LATENCY = 0;     // cycles
 const vluint64_t  IMEM_LATENCY = 0;     // cycles
 
 const vluint64_t  AXI_LATENCY = 1;     // cycles
+
+struct ReadWord
+{
+  Word nextReadWord_;
+  vluint64_t nextReadCycle_;
+  vluint8_t nextReadId_;
+
+  friend bool operator< (ReadWord const& lhs, ReadWord const& rhs) {
+    // Behave as min priority queue
+    return lhs.nextReadCycle_ > rhs.nextReadCycle_;
+  }
+};
 
 class Memory
 {
@@ -67,15 +82,25 @@ public:
         top_.io_axi_r_valid = false;
         top_.io_axi_b_valid = false;
 
-        if (nextReadCycle_ == cycle)
+        if (!readQ_.empty())
         {
-            top_.io_axi_r_payload_data = nextReadWord_;
-            top_.io_axi_r_payload_id = nextReadId_;
+          ReadWord rw = readQ_.top();
+          if (rw.nextReadCycle_ == cycle)
+          {
+            readQ_.pop();
+
+#if 0
+            std::cout << "DATA=" << std::hex << rw.nextReadWord_ << std::endl;
+#endif
+
+            top_.io_axi_r_payload_data = rw.nextReadWord_;
+            top_.io_axi_r_payload_id = rw.nextReadId_;
             top_.io_axi_r_payload_last = true;
             top_.io_axi_r_valid = true;
-            nextReadCycle_ = 0;
+            rw.nextReadCycle_ = 0;
 
             assert(top_.io_axi_r_ready);
+          }
         }
 
         if (top_.io_axi_arw_valid)
@@ -90,24 +115,27 @@ public:
             }
             else
             {
-                if (nextReadCycle_ == 0)
-                {
-                    auto address = top_.io_axi_arw_payload_addr;
-                    auto latency = getLatency(address);
+                auto address = top_.io_axi_arw_payload_addr;
+                auto latency = getLatency(address);
 
-                    assert(latency > 0 && "Invalid latency");
+                assert(latency > 0 && "Invalid latency");
 
 #if 0
-                    std::cout << "TYPE=";
-                    std::cout << (isDataAddress(address) ? "DATA" : "CODE");
-                    std::cout << " LATENCY=" << latency;
-                    std::cout << std::endl;
+                std::cout << "ADDR=" << std::hex << address;
+                std::cout << " TYPE=";
+                std::cout << (isDataAddress(address) ? "DATA" : "CODE");
+                std::cout << " LATENCY=" << latency;
+                std::cout << std::endl;
+
 #endif
 
-                    nextReadWord_ = read(address);
-                    nextReadCycle_ = cycle + latency;
-                    nextReadId_ = top_.io_axi_arw_payload_id;
-                }
+                ReadWord rw;
+
+                rw.nextReadWord_ = read(address);
+                rw.nextReadCycle_ = cycle + latency;
+                rw.nextReadId_ = top_.io_axi_arw_payload_id;
+
+                readQ_.push(rw);
             }
         }
     }
@@ -129,7 +157,6 @@ public:
 private:
 
     using Address = std::uint32_t;
-    using Word = std::uint32_t;
     using Mask = std::uint8_t;
 
     bool isDataAddress(Address address)
@@ -225,11 +252,9 @@ private:
 
     VCore& top_;
     std::vector<Word> memory_;
-    Word nextReadWord_;
-    vluint64_t nextReadCycle_ = 0;
-    vluint8_t nextReadId_;
     std::size_t codeSize_;
     std::unordered_map<Address, Address> dL1_;
+    std::priority_queue<ReadWord> readQ_;
 };
 
 class CharDev
