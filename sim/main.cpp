@@ -40,10 +40,12 @@ struct ReadWord
   vluint64_t nextReadCycle_;
   vluint8_t nextReadId_;
 
+#if 0
+  // Required for min priority queue
   friend bool operator< (ReadWord const& lhs, ReadWord const& rhs) {
-    // Behave as min priority queue
     return lhs.nextReadCycle_ > rhs.nextReadCycle_;
   }
+#endif
 };
 
 class Memory
@@ -84,8 +86,8 @@ public:
 
         if (!readQ_.empty())
         {
-          ReadWord rw = readQ_.top();
-          if (rw.nextReadCycle_ == cycle)
+          ReadWord rw = readQ_.front();
+          if (rw.nextReadCycle_ <= cycle)
           {
             readQ_.pop();
 
@@ -254,7 +256,7 @@ private:
     std::vector<Word> memory_;
     std::size_t codeSize_;
     std::unordered_map<Address, Address> dL1_;
-    std::priority_queue<ReadWord> readQ_;
+    std::queue<ReadWord> readQ_; // TODO: Use queue per id
 };
 
 class CharDev
