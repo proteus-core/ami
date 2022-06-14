@@ -39,7 +39,7 @@ object createStaticPipeline {
 
     pipeline.addPlugins(Seq(
       new MemoryBackbone,
-      new Fetcher(pipeline.fetch),
+      new Fetcher(pipeline.fetch, 10),
       new Decoder(pipeline.decode),
       new RegisterFileAccessor(pipeline.decode, pipeline.writeback),
       new IntAlu(Set(pipeline.execute)),
