@@ -321,9 +321,19 @@ class IBusControl(
   // Are we popping a value from cmdFifo?
   val poppingCmd  = False
 
+  val clearCache = False
+  val flushStarted = RegInit(False)
+  val flushing = (clearCache || flushStarted)
+
+  when (clearCache) {
+    flushStarted := True
+  } elsewhen (!restarting) {
+    flushStarted := False
+  }
+
   when (restartAddress.valid) {
     nextCmd.push(restartAddress.payload)
-  } elsewhen (currentCmd.valid) {
+  } elsewhen (currentCmd.valid && !clearCache) {
     // We speculatively prefetch the next word when no new address is requested
     nextCmd.push(currentCmd.address + bus.config.dataWidth / 8)
   }
@@ -356,12 +366,16 @@ class IBusControl(
     currentCmd.accepted := bus.cmd.ready
   }
 
-  when (restartAccepted) {
+  when (restartAccepted || clearCache) {
     // The amount of commands to flush when restarting is the amount currently in cmdFifo, minus one
     // if we are popping from cmdFifo in this cycle, and plus one if currentCmd is valid but not yet
     // accepted (as it will be pushed on cmdFifo later).
     restartCmdsToFlush :=
       cmdFifo.io.occupancy - U(poppingCmd) + U(currentCmd.valid && !currentCmd.accepted)
+  }
+
+  when (clearCache) {
+    rspFifo.io.flush := True
   }
 
   // Should a memory response be pushed on rspFifo? When it's accepted immediately by the fetch
@@ -418,7 +432,7 @@ class IBusControl(
       pushRsp := False
     }
 
-    when (restarting) {
+    when (restarting || flushing) {
       // Make sure responses are ignored while restarting. If we don't do this, we can get in a
       // "restart loop" when near forward jumps happen because the restarted address is already
       // in-flight and added again to cmdFifo. When the second response comes in, we have to restart
@@ -447,14 +461,14 @@ class IBusControl(
         // happened and we need to restart fetching from the new address.
         restartNeeded := True
       }
-    } elsewhen (!cmdFifo.io.pop.valid || cmdFifo.io.pop.payload.address =/= address) {
+    } elsewhen (!cmdFifo.io.pop.valid || cmdFifo.io.pop.payload.address =/= address || flushing) {
       // We don't have any responses and we either 1) don't have any in-flight requests, or 2) the
       // oldest in-flight request is for an address we don't need. Restart fetching from the
       // requested address.
       restartNeeded := True
     }
 
-    when (restartNeeded && !restarting){
+    when (restartNeeded && (!restarting || flushing)) {
       // Request restart from address
       restartAddress.push(address)
 
@@ -464,5 +478,9 @@ class IBusControl(
     }
 
     (valid, ir)
+  }
+
+  def flushCache(): Unit = {
+    clearCache := True
   }
 }

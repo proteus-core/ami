@@ -66,6 +66,8 @@ trait FetchAddressTranslator {
 
 trait FetchService {
   def setAddressTranslator(translator: FetchAddressTranslator): Unit
+  def flushCache(): Unit
+  def flushCache(stage: Stage): Unit
 }
 
 trait DecoderService {

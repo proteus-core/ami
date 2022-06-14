@@ -182,6 +182,8 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
             stage.output(Data.OUTCOME) := True
             stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
           }
+
+          pipeline.service[FetchService].flushCache(stage)
       }
 
       pipeline plug new Area {
