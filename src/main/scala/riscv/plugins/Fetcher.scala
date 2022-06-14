@@ -19,7 +19,7 @@ class Fetcher(fetchStage: Stage, ibusLatency: Int = 2) extends Plugin[Pipeline] 
       import fetchStage._
 
       val ibus = pipeline.service[MemoryService].createInternalIBus(fetchStage)
-      val ibusCtrl = new IBusControl(ibus, ibusLatency)
+      val ibusCtrl = new IBusControl(ibus, ibusLatency, ibusLatency)
 
       arbitration.isReady := False
 
