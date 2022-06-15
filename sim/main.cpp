@@ -24,15 +24,14 @@ const int    CLOCK_PERIOD    = 1/(CLOCK_FREQUENCY*TIMESCALE);
 
 const std::uint64_t MAX_CYCLES = 1000000000ULL;
 
-const std::size_t DL1_CACHE_LINE_MASK = 0x3f;
-const std::size_t DL1_CACHE_LINE_SIZE = 64;    // bytes
-const std::size_t DL1_SIZE            = 4;  // bytes
-const vluint64_t  DL1_LATENCY         = 0;     // cycles
+const std::size_t DL1_CACHE_LINE_MASK = 0x0f;
+const std::size_t DL1_CACHE_LINE_SIZE = 16;  // bytes
+const std::size_t DL1_SIZE            = 64;  // bytes
 
-const vluint64_t  DMEM_LATENCY = 0;     // cycles
-const vluint64_t  IMEM_LATENCY = 0;     // cycles
-
-const vluint64_t  AXI_LATENCY = 1;     // cycles
+const vluint64_t  AXI_LATENCY  = 1; // cycles
+const vluint64_t  DL1_LATENCY  = 0; // cycles
+const vluint64_t  DMEM_LATENCY = 1; // cycles
+const vluint64_t  IMEM_LATENCY = 0; // cycles
 
 struct ReadWord
 {
@@ -48,11 +47,45 @@ struct ReadWord
 #endif
 };
 
+class ReadQueue
+{
+public:
+  ReadQueue(int id) : id_(id) {}
+
+  bool empty(vluint64_t cycle) const
+  {
+    if (queue_.empty())
+      return true;
+
+    return queue_.front().nextReadCycle_ > cycle;
+  }
+
+  const ReadWord & front() const
+  {
+    return queue_.front();
+  }
+
+  void pop()
+  {
+    queue_.pop();
+  }
+
+  void push(const ReadWord &rw)
+  {
+    queue_.push(rw);
+  }
+
+private:
+  int id_;
+  std::queue<ReadWord> queue_; // TODO: Use queue per id
+};
+
 class Memory
 {
 public:
 
-    Memory(VCore& top, const char* memoryFile) : top_{top}
+    Memory(VCore& top, const char* memoryFile) :
+      top_{top}, readCodeQ_(0), readDataQ_(8)
     {
         auto ifs = std::ifstream{memoryFile, std::ifstream::binary};
         auto memoryBytes =
@@ -84,25 +117,15 @@ public:
         top_.io_axi_r_valid = false;
         top_.io_axi_b_valid = false;
 
-        if (!readQ_.empty())
+        if (! readDataQ_.empty(cycle))
         {
-          ReadWord rw = readQ_.front();
-          if (rw.nextReadCycle_ <= cycle)
-          {
-            readQ_.pop();
-
-#if 0
-            std::cout << "DATA=" << std::hex << rw.nextReadWord_ << std::endl;
-#endif
-
-            top_.io_axi_r_payload_data = rw.nextReadWord_;
-            top_.io_axi_r_payload_id = rw.nextReadId_;
-            top_.io_axi_r_payload_last = true;
-            top_.io_axi_r_valid = true;
-            rw.nextReadCycle_ = 0;
-
-            assert(top_.io_axi_r_ready);
-          }
+          putOnBus(readDataQ_.front());
+          readDataQ_.pop();
+        }
+        else if (! readCodeQ_.empty(cycle))
+        {
+          putOnBus(readCodeQ_.front());
+          readCodeQ_.pop();
         }
 
         if (top_.io_axi_arw_valid)
@@ -126,9 +149,8 @@ public:
                 std::cout << "ADDR=" << std::hex << address;
                 std::cout << " TYPE=";
                 std::cout << (isDataAddress(address) ? "DATA" : "CODE");
-                std::cout << " LATENCY=" << latency;
+                std::cout << " LATENCY=" << std::dec << latency;
                 std::cout << std::endl;
-
 #endif
 
                 ReadWord rw;
@@ -137,7 +159,10 @@ public:
                 rw.nextReadCycle_ = cycle + latency;
                 rw.nextReadId_ = top_.io_axi_arw_payload_id;
 
-                readQ_.push(rw);
+                if (rw.nextReadId_ == 0)
+                  readCodeQ_.push(rw);
+                else
+                  readDataQ_.push(rw);
             }
         }
     }
@@ -177,8 +202,28 @@ private:
         {
             auto index = dL1Index(address);
 
+#if 0
+                std::cout << "CACHE " << std::hex << address;
+                std::cout << " @ " << std::dec << index << std::endl;
+#endif
+
             dL1_[index] = address;
         }
+    }
+
+    void putOnBus(const ReadWord &rw)
+    {
+#if 0
+      std::cout << "DATA=" << std::hex << rw.nextReadWord_ << std::endl;
+#endif
+
+      top_.io_axi_r_payload_data = rw.nextReadWord_;
+      top_.io_axi_r_payload_id = rw.nextReadId_;
+      top_.io_axi_r_payload_last = true;
+      top_.io_axi_r_valid = true;
+      //rw.nextReadCycle_ = 0;
+
+      assert(top_.io_axi_r_ready);
     }
 
     Word read(Address address)
@@ -256,7 +301,8 @@ private:
     std::vector<Word> memory_;
     std::size_t codeSize_;
     std::unordered_map<Address, Address> dL1_;
-    std::queue<ReadWord> readQ_; // TODO: Use queue per id
+    ReadQueue readCodeQ_;
+    ReadQueue readDataQ_;
 };
 
 class CharDev
