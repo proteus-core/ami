@@ -195,6 +195,7 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     pipeline.service[BranchService].onBranch { (stage, _, taken) =>
       when (!taken && stage.value(Data.CTBRANCH)) {
         stage.arbitration.jumpRequested := True
+        pipeline.service[FetchService].flushCache(stage)
       }
     }
 
