@@ -188,12 +188,7 @@ class MulDiv(exeStages: Set[Stage]) extends Plugin[Pipeline] {
           val dividend = dividendIsNeg ? Utils.twosComplement(rs1) | rs1
           val divisor = divisorIsNeg ? Utils.twosComplement(rs2) | rs2
 
-          when (divisor === 0) {
-            arbitration.isReady := True
-            output(pipeline.data.RD_DATA) :=
-              value(Data.REM) ? rs1 | S(-1, config.xlen bits).asUInt
-            output(pipeline.data.RD_DATA_VALID) := True
-          } elsewhen (initDiv) {
+          when (initDiv) {
             quotient := dividend
             remainder := 0
             step.clear()
@@ -211,8 +206,14 @@ class MulDiv(exeStages: Set[Stage]) extends Plugin[Pipeline] {
               correctedRemainder := Utils.twosComplement(remainder)
             }
 
-            output(pipeline.data.RD_DATA) :=
-              value(Data.REM) ? correctedRemainder | correctedQuotient
+            when (divisor === 0) {
+              output(pipeline.data.RD_DATA) :=
+                value(Data.REM) ? rs1 | S(-1, config.xlen bits).asUInt
+            } otherwise {
+              output(pipeline.data.RD_DATA) :=
+                value(Data.REM) ? correctedRemainder | correctedQuotient
+            }
+
             output(pipeline.data.RD_DATA_VALID) := True
             arbitration.isReady := True
             step.increment()
