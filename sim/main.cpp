@@ -159,10 +159,10 @@ public:
                 rw.nextReadCycle_ = cycle + latency;
                 rw.nextReadId_ = top_.io_axi_arw_payload_id;
 
-                if (rw.nextReadId_ == 0)
-                  readCodeQ_.push(rw);
-                else
+                if (isDataAddress(address))
                   readDataQ_.push(rw);
+                else
+                  readCodeQ_.push(rw);
             }
         }
     }
