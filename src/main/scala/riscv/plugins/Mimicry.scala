@@ -122,34 +122,34 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
       val stage = pipeline.retirementStage
 
       config.setIrMapper((stage, ir) => {
-        var result = ir | 3
+        val result = ir | 3
+        val conditional = isConditional(result)
+        val jump = isJump(result)
 
-        when (ir =/= 0) {
-          switch (ir(1 downto 0)) {
-            is(0) {
-              when (isConditional(result)) {
-                stage.output(Data.CTBRANCH) := True
-              } otherwise {
-                stage.output(Data.GHOST) := True
-              }
+        switch (ir(1 downto 0)) {
+          is(0) {
+            when (conditional) {
+              stage.output(Data.CTBRANCH) := True
+            } otherwise {
+              stage.output(Data.GHOST) := True
             }
-            is(1) {
-              when (isJump(result)) {
-                stage.output(Data.AJUMP) := True
-              } elsewhen (isConditional(result)) {
-                stage.output(Data.ABRANCH) := True
-              } otherwise {
-                stage.output(Data.MIMIC) := True
-              }
+          }
+          is(1) {
+            when (jump) {
+              stage.output(Data.AJUMP) := True
+            } elsewhen (conditional) {
+              stage.output(Data.ABRANCH) := True
+            } otherwise {
+              stage.output(Data.MIMIC) := True
             }
-            is(2) {
+          }
+          is(2) {
+            stage.output(Data.PERSISTENT) := True
+          }
+          is(3) {
+            when (jump) {
+              // Jumps are persistent by default, i.e., rd is always written
               stage.output(Data.PERSISTENT) := True
-            }
-            is(3) {
-              when (isJump(result)) {
-                // Jumps are persistent by default, i.e., rd is always written
-                stage.output(Data.PERSISTENT) := True
-              }
             }
           }
         }
@@ -241,7 +241,7 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
             reactivation := True
 
             output(Data.MMENTRY) := pc
-            output(Data.MMEXIT) := pc + 4
+            output(Data.MMEXIT) := input(pipeline.data.NEXT_PC)
             output(Data.MM_WRITE_BOUNDS) := True
 
             output(Data.MMSTAT_DEPTH) := 1
