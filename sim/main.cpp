@@ -30,7 +30,7 @@ const std::size_t DL1_SIZE            = 64;  // bytes
 
 const vluint64_t  AXI_LATENCY  = 1; // cycles
 const vluint64_t  DL1_LATENCY  = 0; // cycles
-const vluint64_t  DMEM_LATENCY = 1; // cycles
+const vluint64_t  DMEM_LATENCY = 0; // cycles
 const vluint64_t  IMEM_LATENCY = 0; // cycles
 
 struct ReadWord
