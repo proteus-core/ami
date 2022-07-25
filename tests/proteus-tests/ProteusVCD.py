@@ -60,10 +60,12 @@ class ProteusVCD:
 
     self.marks = {}
 
-    signal = self.PL.decode_out_MARK
+    signal = self.PL.clk
     for t, v in [(t, int(v, 2)) for (t, v) in self.vcd[signal].tv]:
       if v == 1:
-        if self.as_int(self.PL.decode_arbitration_isValid, t) == 1:
+        is_done = self.as_int(self.PL.decode_arbitration_isDone, t) == 1
+        is_mark = self.as_int(self.PL.decode_out_MARK, t) == 1
+        if is_done and is_mark:
           n = self.as_int(self.PL.decode_out_IMM, t)
           addr = self.as_int(self.PL.fetch_out_PC, t)
           if not n in self.marks:
