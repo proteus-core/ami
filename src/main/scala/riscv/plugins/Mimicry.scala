@@ -181,21 +181,12 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
             //         (redundant with Data.MMEXIT)
             stage.output(Data.OUTCOME) := True
             stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
-          } otherwise {
-            pipeline.service[FetchService].flushCache(stage)
           }
       }
 
       pipeline plug new Area {
         val csrService = pipeline.service[CsrService]
         mmstat <> csrService.getCsr(CSR_MMSTAT)
-      }
-    }
-
-    pipeline.service[BranchService].onBranch { (stage, _, taken) =>
-      when (!taken && stage.value(Data.CTBRANCH)) {
-        stage.arbitration.jumpRequested := True
-        pipeline.service[FetchService].flushCache(stage)
       }
     }
 
@@ -223,6 +214,10 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
   override def build(): Unit = {
     exeStage plug new Area {
       import exeStage._
+
+      when (value(Data.ABRANCH)) {
+        pipeline.serviceOption[ConstantTimeService].foreach(_.ignore(exeStage))
+      }
 
       when (arbitration.isRunning) {
         val depth = input(Data.MMSTAT_DEPTH)

@@ -56,6 +56,7 @@ object createStaticPipeline {
       new Interrupts(pipeline.writeback),
       new MulDiv(Set(pipeline.execute)),
       new Mimicry(pipeline.execute),
+      new ConstantTime,
       new Marker
     ) ++ extraPlugins)
 
