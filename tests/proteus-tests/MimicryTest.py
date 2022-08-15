@@ -10,14 +10,11 @@ class MimicryTest(ProteusTest.ProteusTest):
   """
   Returns true if the inMimicryMode signal is set at time t
   """
-  def mm_depth(self, vcd, t):
-    return vcd.as_int(vcd.CSR.CsrFile_depth, t)
-
-  def mm_pdepth(self, vcd, t):
-    return vcd.as_int(vcd.CSR.CsrFile_pdepth, t)
+  def mm_AC(self, vcd, t):
+    return vcd.as_int(vcd.CSR.CsrFile_AC, t)
 
   def in_mm(self, vcd, t): 
-    return self.mm_depth(vcd, t) > 0
+    return self.mm_AC(vcd, t) > 0
 
   def mm_entry(self, vcd, t):
     return vcd.as_int(vcd.CSR.CsrFile_entry, t)

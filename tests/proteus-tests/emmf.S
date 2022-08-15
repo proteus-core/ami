@@ -22,7 +22,7 @@ RVTEST_CODE_BEGIN
 
 mtvec_handler:
   csrr x5, CSR_MEPC
-  addi x5, x5, 4
+  p.addi x5, x5, 4
   csrw CSR_MEPC, x5
   mret
 

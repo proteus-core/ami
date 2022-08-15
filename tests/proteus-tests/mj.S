@@ -8,7 +8,7 @@
 #   - Nested calls
 #   - Recursive calls
 #   - Non activating jump with callee performing a reccursive activating jump
-#     (To test depths > 1)
+#     (To test AC > 1)
 #
 
 #include "riscv_test.h"
@@ -47,7 +47,7 @@ foo222:
   beq a0, x0, 1f
   p.addi a0, x0, 0
   p.addi s1, ra, 0
-  a.jal ra, foo222    # Recursive call which does not make depth grow
+  a.jal ra, foo222    # Recursive call which does not make AC grow
   p.addi ra, s1, 0
 1:
   ret
@@ -59,7 +59,7 @@ foo33:
   p.addi a0, a0, -1
   sw ra, 0(sp)
   mark 0x331
-  a.jal ra, foo33     # Recursive call which makes depth grow
+  a.jal ra, foo33     # Recursive call which makes AC grow
   p.lw ra, 0(sp)
 1:
   p.addi sp, sp, 4

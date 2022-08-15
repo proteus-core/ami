@@ -25,11 +25,11 @@ class mj(MimicryTest.MimicryTest):
     t = mark2.WB[0]
     self.assertTrue(self.is_ajump(vcd, t))
     self.assertFalse(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 0)
+    self.assertEqual(self.mm_AC(vcd, t), 0)
 
     tn = vcd.nextt(t)
     self.assertTrue(self.in_mm(vcd, tn))
-    self.assertEqual(self.mm_depth(vcd, tn), 1)
+    self.assertEqual(self.mm_AC(vcd, tn), 1)
     self.assertEqual(self.mm_entry(vcd, tn), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, tn), mark2.addr+4)
 
@@ -38,7 +38,7 @@ class mj(MimicryTest.MimicryTest):
 
     t = mark11.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark1.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark1.addr+4)
 
@@ -47,7 +47,7 @@ class mj(MimicryTest.MimicryTest):
 
     t = mark22.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
       
@@ -56,7 +56,7 @@ class mj(MimicryTest.MimicryTest):
 
     t = mark222.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
 
@@ -65,11 +65,11 @@ class mj(MimicryTest.MimicryTest):
 
     t = mark222.WB[1]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark2.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark2.addr+4)
 
-    # Mark 33x - Tests recursive calls with depth > 1
+    # Mark 33x - Tests recursive calls with AC > 1
     mark330 = vcd.get_mark(0x330)
     mark331 = vcd.get_mark(0x331)
     mark332 = vcd.get_mark(0x332)
@@ -80,38 +80,38 @@ class mj(MimicryTest.MimicryTest):
     # Mark 330 (start)
     t = mark330.WB[0]
     self.assertFalse(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 0)
+    self.assertEqual(self.mm_AC(vcd, t), 0)
     self.assertEqual(self.mm_entry(vcd, t), 0x7FFFFFFF)
     self.assertEqual(self.mm_exit(vcd, t), 0x7FFFFFFF)
 
     t = mark330.WB[1]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark331.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark331.addr+4)
 
     t = mark330.WB[2]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 2)
+    self.assertEqual(self.mm_AC(vcd, t), 2)
     self.assertEqual(self.mm_entry(vcd, t), mark331.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark331.addr+4)
 
     # Mark 332 (return)
     t = mark332.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 2)
+    self.assertEqual(self.mm_AC(vcd, t), 2)
     self.assertEqual(self.mm_entry(vcd, t), mark331.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark331.addr+4)
 
     t = mark332.WB[1]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark331.addr)
     self.assertEqual(self.mm_exit(vcd, t), mark331.addr+4)
 
     t = mark332.WB[2]
     self.assertFalse(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 0)
+    self.assertEqual(self.mm_AC(vcd, t), 0)
     self.assertEqual(self.mm_entry(vcd, t), 0x7FFFFFFF)
     self.assertEqual(self.mm_exit(vcd, t), 0x7FFFFFFF)
 

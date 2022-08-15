@@ -12,12 +12,12 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
 
   override def getImplementedExtensions = Seq('X')
 
-  private val CSR_MMSTAT        = 0x7FF          // CSR identifier
-  private val CSR_MMSTAT_DEPTH  = (15 downto 0)  // activation nesting level
-  private val CSR_MMSTAT_PDEPTH = (31 downto 16) // previous nesting level
-
+  // The mimicry state is stored in CSRs (activation counter, entry address, and
+  //  exit address) with the following idendifiers:
+  private val CSR_MMAC         = 0x7FF          
   private val CSR_MMENTRY      = 0x7DF         // CSR identifier
   private val CSR_MMEXIT       = 0x7EF         // CSR identifier
+
   private val CSR_MMADDR_NONE  = 0x7FFFFFFF    // TODO: which value?
 
   def isJump(ir: UInt): Bool = {
@@ -52,9 +52,9 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     // CSR data
     object MMEXIT extends PipelineData(UInt(32 bits))   // Mimicry exit address
     object MMENTRY extends PipelineData(UInt(32 bits))  // Mimicry entry address
-    object MM_WRITE_DEPTH extends PipelineData(Bool())  // Update depth?
+    object MMAC extends PipelineData(UInt(32 bits))     // Activation counter
+    object MM_WRITE_AC extends PipelineData(Bool())     // Update AC?
     object MM_WRITE_BOUNDS extends PipelineData(Bool()) // Update entry/exit?
-    object MMSTAT_DEPTH extends PipelineData(UInt(16 bits))
   }
 
   // Mimicry mode entry
@@ -77,25 +77,19 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     override def write(addr: UInt): Unit = exit := addr
   }
 
-  // Mimicry mode status information
-  private class MmStat(implicit config: Config) extends Csr {
-    val depth  = Reg(UInt(CSR_MMSTAT_DEPTH.length bits)).init(0)
-    val pdepth = Reg(UInt(CSR_MMSTAT_DEPTH.length bits)).init(0)
+  // Mimicry mode activation counter (AC)
+  private class MmAC(implicit config: Config) extends Csr {
+    val AC = Reg(UInt(config.xlen bits)).init(0)
 
-    val mmstat = pdepth ## depth
+    override def read(): UInt = AC
 
-    override def read(): UInt = mmstat.asUInt
-
-    override def write(value: UInt): Unit = {
-      depth := value(CSR_MMSTAT_DEPTH)
-      pdepth := value(CSR_MMSTAT_PDEPTH)
-    }
+    override def write(value: UInt): Unit = AC := value
   }
 
   override def setup(): Unit = {
 
     val csrService = pipeline.service[CsrService]
-    csrService.registerCsr(CSR_MMSTAT, new MmStat)
+    csrService.registerCsr(CSR_MMAC , new MmAC)
     csrService.registerCsr(CSR_MMENTRY, new MmEntry)
     csrService.registerCsr(CSR_MMEXIT , new MmExit)
 
@@ -115,7 +109,7 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
         Data.CTBRANCH -> False,
 
         // CSR updates
-        Data.MM_WRITE_DEPTH  -> False,
+        Data.MM_WRITE_AC  -> False,
         Data.MM_WRITE_BOUNDS -> False
       ))
 
@@ -160,33 +154,14 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
 
     pipeline.service[JumpService].onJump { (stage, _, _, jumpType) =>
 
-      val mmstat = Utils.outsideConditionScope(slave(new CsrIo))
-      val mmstatCur = mmstat.read()
-      val mmstatNew = UInt(config.xlen bits)
-      mmstatNew := mmstatCur
-
-      jumpType match {
-        case JumpType.Trap =>
-          mmstatNew(CSR_MMSTAT_DEPTH) := U(0)
-          mmstatNew(CSR_MMSTAT_PDEPTH) := mmstatCur(CSR_MMSTAT_DEPTH)
-          mmstat.write(mmstatNew)
-        case JumpType.TrapReturn =>
-          mmstatNew(CSR_MMSTAT_DEPTH) := mmstatCur(CSR_MMSTAT_PDEPTH)
-          mmstatNew(CSR_MMSTAT_PDEPTH) := U(0)
-          mmstat.write(mmstatNew)
-        case JumpType.Normal =>
-          when (stage.value(Data.ABRANCH)) {
-            pipeline.service[JumpService].disableJump(stage)
-            // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
-            //         (redundant with Data.MMEXIT)
-            stage.output(Data.OUTCOME) := True
-            stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
-          }
-      }
-
-      pipeline plug new Area {
-        val csrService = pipeline.service[CsrService]
-        mmstat <> csrService.getCsr(CSR_MMSTAT)
+      if (jumpType == JumpType.Normal) {
+        when (stage.value(Data.ABRANCH)) {
+          pipeline.service[JumpService].disableJump(stage)
+          // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
+          //         (redundant with Data.MMEXIT)
+          stage.output(Data.OUTCOME) := True
+          stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
+        }
       }
     }
 
@@ -195,8 +170,8 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     // finish()). Therefore, we have to manually inform the router that these outputs will be
     // needed.
     pipeline.retirementStage.output(Data.MM_WRITE_BOUNDS)
-    pipeline.retirementStage.output(Data.MM_WRITE_DEPTH)
-    pipeline.retirementStage.output(Data.MMSTAT_DEPTH)
+    pipeline.retirementStage.output(Data.MM_WRITE_AC)
+    pipeline.retirementStage.output(Data.MMAC)
     pipeline.retirementStage.output(Data.MMENTRY)
     pipeline.retirementStage.output(Data.MMEXIT)
 
@@ -220,16 +195,16 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
       }
 
       when (arbitration.isRunning) {
-        val depth = input(Data.MMSTAT_DEPTH)
+        val AC = input(Data.MMAC)
         val mmexit = input(Data.MMEXIT)
         val mmentry = input(Data.MMENTRY)
         val pc = input(pipeline.data.PC)
         val reactivation = False
 
-        val isExit = (depth === 1) && (pc === mmexit)
+        val isExit = (AC === 1) && (pc === mmexit)
 
         // 1) Is mimicry mode disabled?
-        when ((depth === 0) || isExit) {
+        when ((AC === 0) || isExit) {
 
           // 1.1) Are we dealing with an activating jump?
           when (value(Data.AJUMP)) {
@@ -239,8 +214,8 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
             output(Data.MMEXIT) := input(pipeline.data.NEXT_PC)
             output(Data.MM_WRITE_BOUNDS) := True
 
-            output(Data.MMSTAT_DEPTH) := 1
-            output(Data.MM_WRITE_DEPTH) := True
+            output(Data.MMAC) := 1
+            output(Data.MM_WRITE_AC) := True
           }
 
           // 1.2) Are we dealing with an activating branch?
@@ -251,31 +226,31 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
             // mmexit written in onJump
             output(Data.MM_WRITE_BOUNDS) := True
 
-            output(Data.MMSTAT_DEPTH) := 1
-            output(Data.MM_WRITE_DEPTH) := True
+            output(Data.MMAC) := 1
+            output(Data.MM_WRITE_AC) := True
           }
         }
 
         // 2) Is the current program counter registered as the entry address?
         when (pc === mmentry) {
-          // TODO: assert depth > 0
-          output(Data.MMSTAT_DEPTH) := depth + 1 // Update recursion depth
-          output(Data.MM_WRITE_DEPTH) := True
+          // TODO: assert AC > 0
+          output(Data.MMAC) := AC + 1
+          output(Data.MM_WRITE_AC) := True
         }
 
         // 3) Is the current program counter registered as the exit address?
         when (! reactivation) {
           when (pc === mmexit) {
-            when (depth === 1) {
+            when (AC === 1) {
               // We are exiting mimicry mode
               output(Data.MMENTRY) := CSR_MMADDR_NONE
               output(Data.MMEXIT) := CSR_MMADDR_NONE
               output(Data.MM_WRITE_BOUNDS) := True
             }
 
-            // TODO: assert depth > 0
-            output(Data.MMSTAT_DEPTH) := depth - 1 // Update recursion depth
-            output(Data.MM_WRITE_DEPTH) := True
+            // TODO: assert AC > 0
+            output(Data.MMAC) := AC - 1
+            output(Data.MM_WRITE_AC) := True
           }
         }
 
@@ -285,11 +260,11 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
         }
 
         when (value(Data.GHOST)) {
-          when ((depth === 0) || isExit) {
+          when ((AC === 0) || isExit) {
             output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
           }
         } elsewhen (!value(Data.PERSISTENT)) {
-          when ((depth > 0) && (! isExit)) {
+          when ((AC > 0) && (! isExit)) {
             output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
           }
         }
@@ -301,7 +276,7 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
     val csrArea = wbStage plug new Area {
       import wbStage._
 
-      val mmstat  = slave(new CsrIo)
+      val mmAC    = slave(new CsrIo)
       val mmentry = slave(new CsrIo)
       val mmexit  = slave(new CsrIo)
 
@@ -311,18 +286,15 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
           mmexit.write(value(Data.MMEXIT))
         }
 
-        when (value(Data.MM_WRITE_DEPTH)) {
-          val mstatNew = UInt(32 bits)
-          mstatNew := mmstat.read()
-          mstatNew(CSR_MMSTAT_DEPTH) := value(Data.MMSTAT_DEPTH)
-          mmstat.write(mstatNew)
+        when (value(Data.MM_WRITE_AC)) {
+          mmAC.write(value(Data.MMAC))
         }
       }
     }
 
     pipeline plug new Area {
       val csrService = pipeline.service[CsrService]
-      csrArea.mmstat  <> csrService.getCsr(CSR_MMSTAT)
+      csrArea.mmAC  <> csrService.getCsr(CSR_MMAC)
       csrArea.mmentry <> csrService.getCsr(CSR_MMENTRY)
       csrArea.mmexit  <> csrService.getCsr(CSR_MMEXIT)
     }
@@ -339,13 +311,13 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
         csr
       }
 
-      val mmstat = readOnlyCsr(CSR_MMSTAT)
+      val mmAC    = readOnlyCsr(CSR_MMAC)
       val mmentry = readOnlyCsr(CSR_MMENTRY)
-      val mmexit = readOnlyCsr(CSR_MMEXIT)
+      val mmexit  = readOnlyCsr(CSR_MMEXIT)
 
       // Connect current CSR values to the inputs of exeStage. If there are updated values later in
       // the pipeline, they will be forwarded below.
-      exeStage.input(Data.MMSTAT_DEPTH) := mmstat.read()(CSR_MMSTAT_DEPTH)
+      exeStage.input(Data.MMAC) := mmAC.read()
       exeStage.input(Data.MMENTRY) := mmentry.read()
       exeStage.input(Data.MMEXIT) := mmexit.read()
     }
@@ -355,8 +327,8 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
       // reads those values, we don't have to forward to other stages.
       if (stage == exeStage) {
         for (laterStage <- nextStages.reverse) {
-          when (laterStage.output(Data.MM_WRITE_DEPTH)) {
-            stage.input(Data.MMSTAT_DEPTH) := laterStage.output(Data.MMSTAT_DEPTH)
+          when (laterStage.output(Data.MM_WRITE_AC)) {
+            stage.input(Data.MMAC) := laterStage.output(Data.MMAC)
           }
 
           when (laterStage.output(Data.MM_WRITE_BOUNDS)) {

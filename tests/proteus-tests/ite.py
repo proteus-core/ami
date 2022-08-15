@@ -49,23 +49,23 @@ class ite(MimicryTest.MimicryTest):
     mark4 = vcd.get_mark(4)
     t = mark4.WB[0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark4.addr-8)
     self.assertEqual(self.mm_exit(vcd, t), mark4.addr+16)
     t = vcd.WB2[mark4.addr+8][0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark4.addr-8)
     self.assertEqual(self.mm_exit(vcd, t), mark4.addr+16)
     t = vcd.WB2[mark4.addr+12][0]
     self.assertTrue(self.in_mm(vcd, t))
-    self.assertEqual(self.mm_depth(vcd, t), 1)
+    self.assertEqual(self.mm_AC(vcd, t), 1)
     self.assertEqual(self.mm_entry(vcd, t), mark4.addr-8)
     self.assertEqual(self.mm_exit(vcd, t), mark4.addr+16)
     t = vcd.WB2[mark4.addr+16][0]
     tn = vcd.nextt(t)
     self.assertFalse(self.in_mm(vcd, tn))
-    self.assertEqual(self.mm_depth(vcd, tn), 0)
+    self.assertEqual(self.mm_AC(vcd, tn), 0)
     self.assertEqual(self.mm_entry(vcd, tn), 0x7FFFFFFF)
     self.assertEqual(self.mm_exit(vcd, tn), 0x7FFFFFFF)
 
