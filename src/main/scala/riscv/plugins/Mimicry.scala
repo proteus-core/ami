@@ -165,6 +165,13 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
       }
     }
 
+    pipeline.service[BranchService].onBranch { (stage, _, taken) =>
+      when (!taken && stage.value(Data.CTBRANCH)) {
+        stage.arbitration.jumpRequested := True
+        pipeline.service[FetchService].flushCache(stage)
+      }
+    }
+
     // Since the CSR forwarding logic only accesses these WB output in the finish() phase, they are
     // not automatically routed (because the routing uses the information available *before*
     // finish()). Therefore, we have to manually inform the router that these outputs will be
@@ -189,10 +196,6 @@ class Mimicry(exeStage: Stage) extends Plugin[Pipeline] {
   override def build(): Unit = {
     exeStage plug new Area {
       import exeStage._
-
-      when (value(Data.ABRANCH)) {
-        pipeline.serviceOption[ConstantTimeService].foreach(_.ignore(exeStage))
-      }
 
       when (arbitration.isRunning) {
         val AC = input(Data.MMAC)

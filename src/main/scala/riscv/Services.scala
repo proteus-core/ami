@@ -472,7 +472,3 @@ trait FormalService {
 trait Resettable {
   def pipelineReset(): Unit
 }
-
-trait ConstantTimeService {
-  def ignore(stage: Stage): Unit
-}
