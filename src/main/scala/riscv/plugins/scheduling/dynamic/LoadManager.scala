@@ -4,15 +4,20 @@ import riscv._
 import spinal.core._
 import spinal.lib.Stream
 
-class LoadManager(pipeline: Pipeline,
-                  loadStage: Stage,
-                  rob: ReorderBuffer,
-                  retirementRegisters: DynBundle[PipelineData[Data]],
-                  metaRegisters: DynBundle[PipelineData[Data]])
-                 (implicit config: Config) extends Area with Resettable {
+class LoadManager(
+    pipeline: Pipeline,
+    loadStage: Stage,
+    rob: ReorderBuffer,
+    retirementRegisters: DynBundle[PipelineData[Data]],
+    metaRegisters: DynBundle[PipelineData[Data]]
+)(implicit config: Config)
+    extends Area
+    with Resettable {
   val storedMessage: RdbMessage = RegInit(RdbMessage(retirementRegisters, rob.indexBits).getZero)
   val outputCache: RdbMessage = RegInit(RdbMessage(retirementRegisters, rob.indexBits).getZero)
-  val rdbStream: Stream[RdbMessage] = Stream(HardType(RdbMessage(retirementRegisters, rob.indexBits)))
+  val rdbStream: Stream[RdbMessage] = Stream(
+    HardType(RdbMessage(retirementRegisters, rob.indexBits))
+  )
   val cdbStream: Stream[CdbMessage] = Stream(HardType(CdbMessage(metaRegisters, rob.indexBits)))
   private val resultCdbMessage = RegInit(CdbMessage(metaRegisters, rob.indexBits).getZero)
   val rdbWaitingNext, cdbWaitingNext = Bool()
@@ -27,16 +32,16 @@ class LoadManager(pipeline: Pipeline,
 
   private val stateNext = State()
   private val state = RegNext(stateNext).init(State.IDLE)
-  private val isAvailable = Bool()
+  val isAvailable: Bool = Bool()
 
-  def receiveMessage(rdbMessage: RdbMessage): Bool = { // TODO: can we make sure that this method is only called once per cycle?
+  def receiveMessage(rdbMessage: RdbMessage): Bool = {
     val ret = Bool()
     ret := False
-    when (isAvailable) {
+    when(isAvailable) {
       ret := True
       storedMessage := rdbMessage
       val address = pipeline.service[LsuService].addressOfBundle(rdbMessage.registerMap)
-      when (!rob.hasPendingStoreForEntry(rdbMessage.robIndex, address)) {
+      when(!rob.hasPendingStoreForEntry(rdbMessage.robIndex, address)) {
         stateNext := State.EXECUTING
       } otherwise {
         stateNext := State.WAITING_FOR_STORE
@@ -48,12 +53,11 @@ class LoadManager(pipeline: Pipeline,
   def build(): Unit = {
     stateNext := state
     isAvailable := False
+    activeFlush := False
 
-    when (state === State.IDLE) {
+    when(state === State.IDLE) {
       isAvailable := !activeFlush
     }
-
-    activeFlush := False
 
     cdbWaitingNext := cdbWaiting
     rdbWaitingNext := rdbWaiting
@@ -62,7 +66,7 @@ class LoadManager(pipeline: Pipeline,
     loadStage.arbitration.isValid := state === State.EXECUTING
 
     // execution was invalidated while running
-    when (activeFlush) {
+    when(activeFlush) {
       stateNext := State.IDLE
     }
 
@@ -76,14 +80,14 @@ class LoadManager(pipeline: Pipeline,
     rdbStream.valid := False
     rdbStream.payload := outputCache
 
-    when (state === State.WAITING_FOR_STORE && !activeFlush) {
+    when(state === State.WAITING_FOR_STORE && !activeFlush) {
       val address = pipeline.service[LsuService].addressOfBundle(storedMessage.registerMap)
-      when (!rob.hasPendingStoreForEntry(storedMessage.robIndex, address)) {
+      when(!rob.hasPendingStoreForEntry(storedMessage.robIndex, address)) {
         state := State.EXECUTING
       }
     }
 
-    when (state === State.EXECUTING && loadStage.arbitration.isDone && !activeFlush) {
+    when(state === State.EXECUTING && loadStage.arbitration.isDone && !activeFlush) {
       rdbStream.valid := True
       rdbStream.payload.robIndex := storedMessage.robIndex
       for (register <- retirementRegisters.keys) {
@@ -99,7 +103,7 @@ class LoadManager(pipeline: Pipeline,
       rdbWaitingNext := !rdbStream.ready
       cdbWaitingNext := !cdbStream.ready
 
-      when (!rdbStream.ready || !cdbStream.ready) {
+      when(!rdbStream.ready || !cdbStream.ready) {
         stateNext := State.BROADCASTING_RESULT
       } otherwise {
         stateNext := State.IDLE
@@ -107,17 +111,17 @@ class LoadManager(pipeline: Pipeline,
       }
     }
 
-    when (state === State.BROADCASTING_RESULT && !activeFlush) {
+    when(state === State.BROADCASTING_RESULT && !activeFlush) {
       rdbStream.valid := rdbWaiting
       cdbStream.valid := cdbWaiting
 
-      when (rdbStream.ready) {
+      when(rdbStream.ready) {
         rdbWaitingNext := False
       }
-      when (cdbStream.ready) {
+      when(cdbStream.ready) {
         cdbWaitingNext := False
       }
-      when ((rdbStream.ready || !rdbWaiting) && (cdbStream.ready || !cdbWaiting)) {
+      when((rdbStream.ready || !rdbWaiting) && (cdbStream.ready || !cdbWaiting)) {
         stateNext := State.IDLE
         isAvailable := True
       }

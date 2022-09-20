@@ -20,7 +20,7 @@ class Fetcher(fetchStage: Stage, ibusLatency: Int = 2) extends Plugin[Pipeline] 
 
   override def setup(): Unit = {
     val fetchArea = fetchStage plug new Area {
-      val flushCache = in Bool()
+      val flushCache = in Bool ()
       flushCacheIn = flushCache
     }
 
@@ -41,15 +41,15 @@ class Fetcher(fetchStage: Stage, ibusLatency: Int = 2) extends Plugin[Pipeline] 
       val pc = input(pipeline.data.PC)
       val nextPc = pc + 4
 
-      when (flushCacheIn) {
+      when(flushCacheIn) {
         ibusCtrl.flushCache()
       }
 
-      when (arbitration.isRunning) {
+      when(arbitration.isRunning) {
         val fetchAddress = addressTranslator.translate(fetchStage, pc)
         val (valid, rdata) = ibusCtrl.read(fetchAddress)
 
-        when (valid) {
+        when(valid) {
           arbitration.isReady := True
 
           output(pipeline.data.NEXT_PC) := nextPc
@@ -62,7 +62,7 @@ class Fetcher(fetchStage: Stage, ibusLatency: Int = 2) extends Plugin[Pipeline] 
   override def finish(): Unit = {
     pipeline plug new Area {
       for ((_, flush) <- flushCacheStages) {
-        when (flush) {
+        when(flush) {
           flushCache()
         }
       }
@@ -81,13 +81,15 @@ class Fetcher(fetchStage: Stage, ibusLatency: Int = 2) extends Plugin[Pipeline] 
   }
 
   override def flushCache(stage: Stage): Unit = {
-    val flush = flushCacheStages.getOrElseUpdate(stage, {
-      Utils.outsideConditionScope {
-        val flush = out(Bool())
-        flush := False
-        flush
+    val flush = flushCacheStages.getOrElseUpdate(
+      stage, {
+        Utils.outsideConditionScope {
+          val flush = out(Bool())
+          flush := False
+          flush
+        }
       }
-    })
+    )
 
     flush := True
   }

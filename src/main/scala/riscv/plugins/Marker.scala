@@ -15,13 +15,19 @@ class Marker() extends Plugin[Pipeline] {
 
   override def setup(): Unit = {
     pipeline.service[DecoderService].configure { config =>
-      config.addDefault(Map(
-        Data.MARK -> False
-      ))
+      config.addDefault(
+        Map(
+          Data.MARK -> False
+        )
+      )
 
-      config.addDecoding(Opcodes.MARK, InstructionType.I, Map(
-        Data.MARK -> True
-      ))
+      config.addDecoding(
+        Opcodes.MARK,
+        InstructionType.I,
+        Map(
+          Data.MARK -> True
+        )
+      )
     }
   }
 }
