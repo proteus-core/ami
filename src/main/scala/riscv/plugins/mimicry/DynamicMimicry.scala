@@ -8,7 +8,7 @@ import spinal.lib.slave
 //  val MIMIC_GPR = RegisterType.newElement("MIMIC_GPR")
 //}
 
-class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] {
+class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with MimicryService {
 
   override def getImplementedExtensions = Seq('X')
 
@@ -194,6 +194,10 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] {
       pipeline.retirementStage.output(Data.MIMIC)
       pipeline.retirementStage.output(Data.PERSISTENT)
     }
+  }
+
+  override def isActivating(stage: Stage): Bool = {
+    stage.output(Data.AJUMP) || stage.output(Data.ABRANCH)
   }
 
   override def build(): Unit = {

@@ -218,6 +218,15 @@ class ReservationStation(
       issueStage.output(pipeline.data.PC)
     )
 
+    pipeline.serviceOption[MimicryService] foreach {mimicry =>
+      when(mimicry.isActivating(issueStage)) {
+        val nextPc = UInt()
+        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
+
+        rob.newActivating(robIndex, nextPc)
+      }
+    }
+
     robEntryIndex := robIndex
 
     stateNext := State.EXECUTING

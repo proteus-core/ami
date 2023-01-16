@@ -438,6 +438,10 @@ trait DataHazardService {
   def resolveHazard(conflicts: (Stage, Seq[Stage]) => Bool)
 }
 
+trait MimicryService {
+  def isActivating(stage: Stage): Bool
+}
+
 trait FormalService {
   def lsuDefault(stage: Stage)
   def lsuOnLoad(stage: Stage, addr: UInt, rmask: Bits, rdata: UInt)

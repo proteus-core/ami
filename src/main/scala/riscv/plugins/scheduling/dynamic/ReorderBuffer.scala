@@ -10,7 +10,7 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]])(implicit
     retirementRegisters.createBundle
   val ready = Bool()
   val hasValue = Bool()
-  val mimicryEntry = Flow(UInt(config.xlen bits))
+  val mimicryExit = Flow(UInt(config.xlen bits))
 
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters)
@@ -49,10 +49,29 @@ class ReorderBuffer(
   val pushedEntry = RobEntry(retirementRegisters)
   pushedEntry := RobEntry(retirementRegisters).getZero
 
+  val pendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
+  val internalMMAC = RegInit(UInt(config.xlen bits).getZero)
+  val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
+  val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
+
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
     isFull := False
+  }
+
+  def newActivating(index: UInt, exit: UInt): Unit = {
+    when(internalMMAC === 0) {
+      pendingActivating.push(index)
+      internalMMAC := 1
+      internalMMEN := robEntries(index).registerMap.elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
+      internalMMEX := exit
+      robEntries(index).mimicryExit.push(exit)
+    }
+  }
+
+  def waitingForActivating(): Bool = {
+    pendingActivating.valid
   }
 
   def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -102,6 +121,16 @@ class ReorderBuffer(
     adjusted
   }
 
+  def previousIndexFor(index: UInt): UInt = {
+    val previous = UInt()
+    when(index === 0) {
+      previous := capacity - 1
+    } otherwise {
+      previous := index - 1
+    }
+    previous
+  }
+
   def pushEntry(
       rd: UInt,
       rdType: SpinalEnumCraft[RegisterType.type],
@@ -118,6 +147,20 @@ class ReorderBuffer(
     ) := rdType
     pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
+
+    pipeline.serviceOption[MimicryService].foreach {mimicry =>
+      when(internalMMAC =/= 0) {
+        when(pc === internalMMEN) {
+          internalMMAC := internalMMAC + 1
+        }
+        when(pc === internalMMEX) {
+          internalMMAC := internalMMAC - 1
+        } otherwise {
+          pushedEntry.mimicryExit.push(internalMMEX)
+        }
+      }
+    }
+
     newestIndex.value
   }
 
@@ -194,6 +237,18 @@ class ReorderBuffer(
 
   def onRdbMessage(rdbMessage: RdbMessage): Unit = {
     robEntries(rdbMessage.robIndex).registerMap := rdbMessage.registerMap
+
+    pipeline.serviceOption[MimicryService].foreach {mimicry =>
+      when(pendingActivating.valid && pendingActivating.payload === rdbMessage.robIndex) {
+        when(pipeline.service[JumpService].jumpOfBundle(rdbMessage.registerMap)) {
+          // mimicry mode activated
+        } otherwise {
+          robEntries(rdbMessage.robIndex).mimicryExit.setIdle()
+          internalMMAC := 0
+        }
+        pendingActivating.setIdle()
+      }
+    }
 
     // to make sure CSR values are propagated correctly, flush the pipeline after CSR operations
     when(pipeline.service[CsrService].isCsrInstruction(rdbMessage.registerMap)) {
