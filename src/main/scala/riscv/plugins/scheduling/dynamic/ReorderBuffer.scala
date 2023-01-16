@@ -10,6 +10,7 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]])(implicit
     retirementRegisters.createBundle
   val ready = Bool()
   val hasValue = Bool()
+  val mimicryEntry = Flow(UInt(config.xlen bits))
 
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters)
@@ -194,6 +195,7 @@ class ReorderBuffer(
   def onRdbMessage(rdbMessage: RdbMessage): Unit = {
     robEntries(rdbMessage.robIndex).registerMap := rdbMessage.registerMap
 
+    // to make sure CSR values are propagated correctly, flush the pipeline after CSR operations
     when(pipeline.service[CsrService].isCsrInstruction(rdbMessage.registerMap)) {
       pipeline
         .service[JumpService]

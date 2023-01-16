@@ -1,6 +1,7 @@
 package riscv
 
 import riscv.plugins._
+import riscv.plugins.mimicry.{DynamicMimicry, Mimicry}
 import riscv.soc._
 import spinal.core._
 import spinal.core.sim._
@@ -242,7 +243,9 @@ object createDynamicPipeline {
         new TrapHandler(pipeline.retirementStage),
         new MachineMode(pipeline.intAlu1),
         new Interrupts(pipeline.retirementStage),
-        new Timers
+        new Timers,
+        new Marker,
+        new DynamicMimicry(pipeline.rsStages)
       ) ++ extraPlugins
     )
 
