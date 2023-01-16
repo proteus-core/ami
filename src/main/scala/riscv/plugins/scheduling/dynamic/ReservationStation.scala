@@ -21,15 +21,18 @@ case class RegisterSource(indexBits: BitCount) extends Bundle {
 case class InstructionDependencies(indexBits: BitCount) extends Bundle {
   val rs1: RegisterSource = RegisterSource(indexBits)
   val rs2: RegisterSource = RegisterSource(indexBits)
+  val cry: RegisterSource = RegisterSource(indexBits)
 
   def build(): Unit = {
     rs1.build()
     rs2.build()
+    cry.build()
   }
 
   def reset(): Unit = {
     rs1.reset()
     rs2.reset()
+    cry.reset()
   }
 }
 
@@ -83,14 +86,16 @@ class ReservationStation(
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
-    val currentRs1Prior, currentRs2Prior = Flow(UInt(rob.indexBits))
+    val currentRs1Prior, currentRs2Prior, currentCryPrior = Flow(UInt(rob.indexBits))
 
     when(state === State.WAITING_FOR_ARGS) {
       currentRs1Prior := meta.rs1.priorInstruction
       currentRs2Prior := meta.rs2.priorInstruction
+      currentCryPrior := meta.cry.priorInstruction
     } otherwise {
       currentRs1Prior := meta.rs1.priorInstructionNext
       currentRs2Prior := meta.rs2.priorInstructionNext
+      currentCryPrior := meta.cry.priorInstructionNext
     }
 
     when(state === State.WAITING_FOR_ARGS || stateNext === State.WAITING_FOR_ARGS) {
@@ -98,6 +103,10 @@ class ReservationStation(
       r1w := currentRs1Prior.valid
       val r2w = Bool()
       r2w := currentRs2Prior.valid
+      val cyw = Bool()
+      cyw := currentCryPrior.valid
+
+      // TODO: when to update values to have this functionally correct?
 
       when(currentRs1Prior.valid && cdbMessage.robIndex === currentRs1Prior.payload) {
         meta.rs1.priorInstruction.valid := False
@@ -111,7 +120,12 @@ class ReservationStation(
         regs.setReg(pipeline.data.RS2_DATA, cdbMessage.writeValue)
       }
 
-      when(!r1w && !r2w) {
+      when(currentCryPrior.valid && cdbMessage.robIndex === currentCryPrior.payload) {
+        meta.cry.priorInstruction.valid := False
+        cyw := False
+      }
+
+      when(!r1w && !r2w && !cyw) {
         // This is the only place where state is written directly (instead of
         // via stateNext). This ensures that we have priority over whatever
         // execute() writes to it which means that the order of calling
@@ -218,7 +232,7 @@ class ReservationStation(
       issueStage.output(pipeline.data.PC)
     )
 
-    pipeline.serviceOption[MimicryService] foreach {mimicry =>
+    pipeline.serviceOption[MimicryService] foreach { mimicry =>
       when(mimicry.isActivating(issueStage)) {
         val nextPc = UInt()
         nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
@@ -233,6 +247,16 @@ class ReservationStation(
     regs.shift := True
 
     meta.reset()
+
+    pipeline.serviceOption[MimicryService].foreach { mimicry =>
+      when(issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
+        val mimicryDep = rob.hasMimicryDependency(robIndex, issueStage.output(pipeline.data.RD))
+        when(mimicryDep.valid) {
+          meta.cry.priorInstructionNext.push(mimicryDep.payload)
+          stateNext := State.WAITING_FOR_ARGS
+        }
+      }
+    }
 
     def dependencySetup(
         metaRs: RegisterSource,
@@ -256,7 +280,7 @@ class ReservationStation(
           regs.setReg(regData, issueStage.output(regData))
         }
 
-        when((rsInRob && !rsValue.valid)) {
+        when(rsInRob && !rsValue.valid) {
           stateNext := State.WAITING_FOR_ARGS
         }
       }

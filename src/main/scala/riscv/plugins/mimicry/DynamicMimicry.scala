@@ -22,16 +22,16 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
   def isJump(ir: UInt): Bool = {
     (ir === Opcodes.JAL) ||
-      (ir === Opcodes.JALR)
+    (ir === Opcodes.JALR)
   }
 
   def isConditional(ir: UInt): Bool = {
     (ir === Opcodes.BEQ) ||
-      (ir === Opcodes.BNE) ||
-      (ir === Opcodes.BLT) ||
-      (ir === Opcodes.BGE) ||
-      (ir === Opcodes.BLTU) ||
-      (ir === Opcodes.BGEU)
+    (ir === Opcodes.BNE) ||
+    (ir === Opcodes.BLT) ||
+    (ir === Opcodes.BGE) ||
+    (ir === Opcodes.BLTU) ||
+    (ir === Opcodes.BGEU)
   }
 
   // TODO: Prefix with MM

@@ -64,7 +64,8 @@ class ReorderBuffer(
     when(internalMMAC === 0) {
       pendingActivating.push(index)
       internalMMAC := 1
-      internalMMEN := robEntries(index).registerMap.elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
+      internalMMEN := robEntries(index).registerMap
+        .elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
       internalMMEX := exit
       robEntries(index).mimicryExit.push(exit)
     }
@@ -148,7 +149,7 @@ class ReorderBuffer(
     pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
 
-    pipeline.serviceOption[MimicryService].foreach {mimicry =>
+    pipeline.serviceOption[MimicryService].foreach { mimicry =>
       when(internalMMAC =/= 0) {
         when(pc === internalMMEN) {
           internalMMAC := internalMMAC + 1
@@ -204,6 +205,40 @@ class ReorderBuffer(
     (found, target)
   }
 
+  def hasMimicryDependency(robIndex: UInt, regId: UInt): Flow[UInt] = {
+    val result = Flow(UInt(indexBits))
+    result.setIdle()
+
+    for (nth <- 0 until capacity) {
+      val entry = robEntries(nth)
+      val index = UInt(indexBits)
+      index := nth
+
+      val sameTarget = entry.registerMap.elementAs[UInt](
+        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+      ) === robEntries(robIndex).registerMap
+        .elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]])
+      val differentMimicryContext = (entry.mimicryExit.valid || robEntries(
+        robIndex
+      ).mimicryExit.valid) && (entry.mimicryExit.payload =/= robEntries(
+        robIndex
+      ).mimicryExit.payload)
+      val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
+      val isInProgress = !entry.ready
+
+      when(
+        isValidAbsoluteIndex(nth)
+          && isOlder
+          && sameTarget
+          && differentMimicryContext
+          && isInProgress
+      ) {
+        result.push(nth)
+      }
+    }
+    result
+  }
+
   def hasPendingStoreForEntry(robIndex: UInt, address: UInt): Bool = {
     val found = Bool()
     found := False
@@ -238,7 +273,7 @@ class ReorderBuffer(
   def onRdbMessage(rdbMessage: RdbMessage): Unit = {
     robEntries(rdbMessage.robIndex).registerMap := rdbMessage.registerMap
 
-    pipeline.serviceOption[MimicryService].foreach {mimicry =>
+    pipeline.serviceOption[MimicryService].foreach { mimicry =>
       when(pendingActivating.valid && pendingActivating.payload === rdbMessage.robIndex) {
         when(pipeline.service[JumpService].jumpOfBundle(rdbMessage.registerMap)) {
           // mimicry mode activated
