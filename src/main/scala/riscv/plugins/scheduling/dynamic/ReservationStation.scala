@@ -107,6 +107,7 @@ class ReservationStation(
       cyw := currentCryPrior.valid
 
       // TODO: when to update values to have this functionally correct?
+      // listen to all updates on registers rs1 and ts2 (if they're valid) and update if register type is non-cry
 
       when(currentRs1Prior.valid && cdbMessage.robIndex === currentRs1Prior.payload) {
         meta.rs1.priorInstruction.valid := False
@@ -133,6 +134,7 @@ class ReservationStation(
         // to ensure we start executing when execute() is called in the same
         // cycle as (one of) its arguments arrive(s) via processUpdate().
         state := State.EXECUTING
+        // TODO: update mimicry registers again? or can this lead to false alarms?
       }
     }
   }
@@ -224,8 +226,7 @@ class ReservationStation(
   def execute(): Unit = {
     val issueStage = pipeline.issuePipeline.stages.last
 
-    val robIndex = UInt()
-    robIndex := rob.pushEntry(
+    val (robIndex, (mmac, mmen, mmex)) = rob.pushEntry(
       issueStage.output(pipeline.data.RD),
       issueStage.output(pipeline.data.RD_TYPE),
       pipeline.service[LsuService].operationOutput(issueStage),
@@ -233,6 +234,7 @@ class ReservationStation(
     )
 
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
+      mimicry.inputMeta(exeStage, mmac, mmen, mmex)
       when(mimicry.isActivating(issueStage)) {
         val nextPc = UInt()
         nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
@@ -245,6 +247,7 @@ class ReservationStation(
 
     stateNext := State.EXECUTING
     regs.shift := True
+    // TODO: update mimicry registers here
 
     meta.reset()
 
@@ -275,6 +278,7 @@ class ReservationStation(
             regs.setReg(regData, rsValue.payload.writeValue)
           } otherwise {
             metaRs.priorInstructionNext.push(rsValue.payload.robIndex)
+            // TODO: even if waiting for possible new value, set old value in pipeline registers
           }
         } otherwise {
           regs.setReg(regData, issueStage.output(regData))

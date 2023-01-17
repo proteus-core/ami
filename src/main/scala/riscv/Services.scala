@@ -440,6 +440,8 @@ trait DataHazardService {
 
 trait MimicryService {
   def isActivating(stage: Stage): Bool
+
+  def inputMeta(stage: Stage, mmac: UInt, mmen: UInt, mmex: UInt): Unit
 }
 
 trait FormalService {

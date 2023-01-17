@@ -313,6 +313,12 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     }
   }
 
+  override def inputMeta(stage: Stage, mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
+    stage.input(Data.MMAC) := mmac
+    stage.input(Data.MMENTRY) := mmen
+    stage.input(Data.MMEXIT) := mmex
+  }
+
   override def finish(): Unit = {
     pipeline plug new Area {
       val csrService = pipeline.service[CsrService]
@@ -330,9 +336,10 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
       // Connect current CSR values to the inputs of exeStage. If there are updated values later in
       // the pipeline, they will be forwarded below.
-      //      exeStage.input(Data.MMAC) := mmAC.read()
-      //      exeStage.input(Data.MMENTRY) := mmentry.read()
-      //      exeStage.input(Data.MMEXIT) := mmexit.read()
+      //      for (exeStage <- exeStages) {
+      //        exeStage.input(Data.MMAC) := mmAC.read()
+      //        exeStage.input(Data.MMENTRY) := mmentry.read()
+      //        exeStage.input(Data.MMEXIT) := mmexit.read()
     }
 
     //    pipeline

@@ -10,7 +10,7 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]])(implicit
     retirementRegisters.createBundle
   val ready = Bool()
   val hasValue = Bool()
-  val mimicryExit = Flow(UInt(config.xlen bits))
+  val isMimicked = Bool()
 
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters)
@@ -54,9 +54,30 @@ class ReorderBuffer(
   val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
   val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
 
+  def readOnlyCsr(csrId: Int): CsrIo = {
+    val csrService = pipeline.service[CsrService]
+    val csr = csrService.getCsr(csrId)
+    csr.write := False
+    csr.wdata.assignDontCare()
+    csr
+  }
+
+  // TODO: not like this
+  private val CSR_MMAC = 0x7ff
+  private val CSR_MMENTRY = 0x7df // CSR identifier
+  private val CSR_MMEXIT = 0x7ef // CSR identifier
+
+  val acCsr = readOnlyCsr(CSR_MMAC)
+  val enCsr = readOnlyCsr(CSR_MMENTRY)
+  val exCsr = readOnlyCsr(CSR_MMEXIT)
+
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
+    pendingActivating.setIdle()
+    internalMMAC := acCsr.read()
+    internalMMEN := enCsr.read()
+    internalMMEX := exCsr.read()
     isFull := False
   }
 
@@ -67,7 +88,6 @@ class ReorderBuffer(
       internalMMEN := robEntries(index).registerMap
         .elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
       internalMMEX := exit
-      robEntries(index).mimicryExit.push(exit)
     }
   }
 
@@ -137,10 +157,11 @@ class ReorderBuffer(
       rdType: SpinalEnumCraft[RegisterType.type],
       lsuOperationType: SpinalEnumCraft[LsuOperationType.type],
       pc: UInt
-  ): UInt = {
+  ): (UInt, (UInt, UInt, UInt)) = {
     pushInCycle := True
     pushedEntry.ready := False
     pushedEntry.hasValue := False
+    pushedEntry.isMimicked := False
     pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := pc
     pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := rd
     pushedEntry.registerMap.element(
@@ -148,6 +169,14 @@ class ReorderBuffer(
     ) := rdType
     pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
+
+    val newinternalMMAC = UInt(config.xlen bits)
+    val newinternalMMEN = UInt(config.xlen bits)
+    val newinternalMMEX = UInt(config.xlen bits)
+
+    newinternalMMAC := internalMMAC
+    newinternalMMEN := internalMMEN
+    newinternalMMEX := internalMMEX
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       when(internalMMAC =/= 0) {
@@ -157,12 +186,12 @@ class ReorderBuffer(
         when(pc === internalMMEX) {
           internalMMAC := internalMMAC - 1
         } otherwise {
-          pushedEntry.mimicryExit.push(internalMMEX)
+//          pushedEntry.mimicryExit.push(internalMMEX)
         }
       }
     }
 
-    newestIndex.value
+    (newestIndex.value, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
@@ -209,33 +238,33 @@ class ReorderBuffer(
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
-    for (nth <- 0 until capacity) {
-      val entry = robEntries(nth)
-      val index = UInt(indexBits)
-      index := nth
-
-      val sameTarget = entry.registerMap.elementAs[UInt](
-        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
-      ) === robEntries(robIndex).registerMap
-        .elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]])
-      val differentMimicryContext = (entry.mimicryExit.valid || robEntries(
-        robIndex
-      ).mimicryExit.valid) && (entry.mimicryExit.payload =/= robEntries(
-        robIndex
-      ).mimicryExit.payload)
-      val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
-      val isInProgress = !entry.ready
-
-      when(
-        isValidAbsoluteIndex(nth)
-          && isOlder
-          && sameTarget
-          && differentMimicryContext
-          && isInProgress
-      ) {
-        result.push(nth)
-      }
-    }
+//    for (nth <- 0 until capacity) {
+//      val entry = robEntries(nth)
+//      val index = UInt(indexBits)
+//      index := nth
+//
+//      val sameTarget = entry.registerMap.elementAs[UInt](
+//        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+//      ) === robEntries(robIndex).registerMap
+//        .elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]])
+//      val differentMimicryContext = (entry.mimicryExit.valid || robEntries(
+//        robIndex
+//      ).mimicryExit.valid) && (entry.mimicryExit.payload =/= robEntries(
+//        robIndex
+//      ).mimicryExit.payload)
+//      val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
+//      val isInProgress = !entry.ready
+//
+//      when(
+//        isValidAbsoluteIndex(nth)
+//          && isOlder
+//          && sameTarget
+//          && differentMimicryContext
+//          && isInProgress
+//      ) {
+//        result.push(nth)
+//      }
+//    }
     result
   }
 
@@ -273,18 +302,6 @@ class ReorderBuffer(
   def onRdbMessage(rdbMessage: RdbMessage): Unit = {
     robEntries(rdbMessage.robIndex).registerMap := rdbMessage.registerMap
 
-    pipeline.serviceOption[MimicryService].foreach { mimicry =>
-      when(pendingActivating.valid && pendingActivating.payload === rdbMessage.robIndex) {
-        when(pipeline.service[JumpService].jumpOfBundle(rdbMessage.registerMap)) {
-          // mimicry mode activated
-        } otherwise {
-          robEntries(rdbMessage.robIndex).mimicryExit.setIdle()
-          internalMMAC := 0
-        }
-        pendingActivating.setIdle()
-      }
-    }
-
     // to make sure CSR values are propagated correctly, flush the pipeline after CSR operations
     when(pipeline.service[CsrService].isCsrInstruction(rdbMessage.registerMap)) {
       pipeline
@@ -316,6 +333,18 @@ class ReorderBuffer(
 
     when(!isEmpty && oldestEntry.ready) {
       ret.arbitration.isValid := True
+
+      // TODO: should all these changes for mimicry registers come here?
+      pipeline.serviceOption[MimicryService].foreach { mimicry =>
+        when(pendingActivating.valid && pendingActivating.payload === oldestIndex) {
+          when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
+            // mimicry mode activated
+          } otherwise {
+            internalMMAC := 0
+          }
+          pendingActivating.setIdle()
+        }
+      }
     }
 
     when(!isEmpty && oldestEntry.ready && ret.arbitration.isDone) {

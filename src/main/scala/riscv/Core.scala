@@ -1,7 +1,7 @@
 package riscv
 
 import riscv.plugins._
-import riscv.plugins.mimicry.{DynamicMimicry, Mimicry}
+import riscv.plugins.mimicry._
 import riscv.soc._
 import spinal.core._
 import spinal.core.sim._
