@@ -1,6 +1,7 @@
 package riscv.plugins.scheduling.dynamic
 
 import riscv._
+import riscv.plugins.mimicry.MimicryRegisterType
 import spinal.core._
 import spinal.lib.{Counter, Flow}
 
@@ -156,7 +157,8 @@ class ReorderBuffer(
       rd: UInt,
       rdType: SpinalEnumCraft[RegisterType.type],
       lsuOperationType: SpinalEnumCraft[LsuOperationType.type],
-      pc: UInt
+      pc: UInt,
+      nextPc: UInt
   ): (UInt, (UInt, UInt, UInt)) = {
     pushInCycle := True
     pushedEntry.ready := False
@@ -179,16 +181,77 @@ class ReorderBuffer(
     newinternalMMEX := internalMMEX
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
-      when(internalMMAC =/= 0) {
-        when(pc === internalMMEN) {
-          internalMMAC := internalMMAC + 1
+      val reactivation = False
+
+      val isExit = (internalMMAC === 1) && (pc === internalMMEX)
+
+      val issueStage = pipeline.issuePipeline.stages.last
+
+      // 1) Is mimicry mode disabled?
+      when((internalMMAC === 0) || isExit) {
+
+        // 1.1) Are we dealing with an activating jump?
+        when(mimicry.isAJump(issueStage)) {
+          reactivation := True
+
+          newinternalMMEN := pc
+          newinternalMMEX := nextPc // this is pc + 4
+          newinternalMMAC := 1
         }
-        when(pc === internalMMEX) {
-          internalMMAC := internalMMAC - 1
-        } otherwise {
-//          pushedEntry.mimicryExit.push(internalMMEX)
+
+        // 1.2) Are we dealing with an activating branch?
+        when(mimicry.isABranch(issueStage)) { // originally only if branch is taken, we stall to find out the result, if not taken, AC needs to be reset to 0
+          reactivation := True
+
+          newinternalMMEN := pc
+          newinternalMMEX := nextPc // this is the target, not confirmed yet, originally not written
+          newinternalMMAC := 1
         }
       }
+
+      // 2) Is the current program counter registered as the entry address?
+      when(pc === internalMMEN && internalMMAC > 0) {
+        // TODO: assert internalMMAC > 0
+        newinternalMMAC := internalMMAC + 1
+      }
+
+      // 3) Is the current program counter registered as the exit address?
+      when(!reactivation) {
+        when(pc === internalMMEX && internalMMAC > 0) {
+          // we don't care about all this if
+//          when(internalMMAC === 1) {
+//            // We are exiting mimicry mode
+//            output(Data.MMENTRY) := CSR_MMADDR_NONE
+//            output(Data.MMEXIT) := CSR_MMADDR_NONE
+//            output(Data.MM_WRITE_BOUNDS) := True
+//          }
+
+          // TODO: assert internalMMAC > 0
+          newinternalMMAC := internalMMAC - 1
+        }
+      }
+
+      // 4) Do we need to mimic the execution?
+      when(mimicry.isMimic(issueStage)) {
+        pushedEntry.isMimicked := True
+        mimicry.setMimicked(issueStage)
+      }
+
+      when(mimicry.isGhost(issueStage)) {
+        when((internalMMAC === 0) || isExit) {
+          pushedEntry.isMimicked := True
+          mimicry.setMimicked(issueStage)
+        }
+      } elsewhen (!mimicry.isPersistent(issueStage)) {
+        when((internalMMAC > 0) && (!isExit)) {
+          pushedEntry.isMimicked := True
+          mimicry.setMimicked(issueStage)
+        }
+      }
+
+      internalMMAC := newinternalMMAC
+      internalMMEN := newinternalMMEN
+      internalMMEX := newinternalMMEX
     }
 
     (newestIndex.value, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
@@ -341,6 +404,7 @@ class ReorderBuffer(
             // mimicry mode activated
           } otherwise {
             internalMMAC := 0
+            mimicry.inputMeta(ret, 0, 0, 0)
           }
           pendingActivating.setIdle()
         }

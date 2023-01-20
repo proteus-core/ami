@@ -226,19 +226,27 @@ class ReservationStation(
   def execute(): Unit = {
     val issueStage = pipeline.issuePipeline.stages.last
 
+    val nextPc = UInt()
+    nextPc := issueStage.output(pipeline.data.NEXT_PC)
+
+    // calculate next pc for activating jumps here
+    pipeline.serviceOption[MimicryService] foreach { mimicry =>
+      when(mimicry.isABranch(issueStage)) {
+        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
+      }
+    }
+
     val (robIndex, (mmac, mmen, mmex)) = rob.pushEntry(
       issueStage.output(pipeline.data.RD),
       issueStage.output(pipeline.data.RD_TYPE),
       pipeline.service[LsuService].operationOutput(issueStage),
-      issueStage.output(pipeline.data.PC)
+      issueStage.output(pipeline.data.PC),
+      nextPc
     )
 
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
       mimicry.inputMeta(exeStage, mmac, mmen, mmex)
       when(mimicry.isActivating(issueStage)) {
-        val nextPc = UInt()
-        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
-
         rob.newActivating(robIndex, nextPc)
       }
     }

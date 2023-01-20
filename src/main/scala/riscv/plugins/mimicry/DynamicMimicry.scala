@@ -111,7 +111,10 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
           // CSR updates
           Data.MM_WRITE_AC -> False,
-          Data.MM_WRITE_BOUNDS -> False
+          Data.MM_WRITE_BOUNDS -> False,
+          Data.MMAC -> U(0),
+          Data.MMENTRY -> U(0),
+          Data.MMEXIT -> U(0)
         )
       )
 
@@ -163,7 +166,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
           stage.output(Data.OUTCOME) := True
           stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
         } otherwise {
-          pipeline.service[FetchService].flushCache(stage)
+          pipeline.service[FetchService].flushCache(stage) // TODO do we need this?
         }
       }
     }
@@ -196,12 +199,8 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     }
   }
 
-  override def isActivating(stage: Stage): Bool = {
-    stage.output(Data.AJUMP) || stage.output(Data.ABRANCH)
-  }
-
   override def build(): Unit = {
-    // TODO: implement
+//    // TODO: implement
     for (exeStage <- exeStages) {
       exeStage plug new Area {
         import exeStage._
@@ -211,75 +210,75 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
           val mmexit = input(Data.MMEXIT)
           val mmentry = input(Data.MMENTRY)
           val pc = input(pipeline.data.PC)
-          val reactivation = False
-
-          val isExit = (AC === 1) && (pc === mmexit)
-
-          // 1) Is mimicry mode disabled?
-          when((AC === 0) || isExit) {
-
-            // 1.1) Are we dealing with an activating jump?
-            when(value(Data.AJUMP)) {
-              reactivation := True
-
-              output(Data.MMENTRY) := pc
-              output(Data.MMEXIT) := input(pipeline.data.NEXT_PC)
-              output(Data.MM_WRITE_BOUNDS) := True
-
-              output(Data.MMAC) := 1
-              output(Data.MM_WRITE_AC) := True
-            }
-
-            // 1.2) Are we dealing with an activating branch?
-            when(value(Data.ABRANCH) && value(Data.OUTCOME)) {
-              reactivation := True
-
-              output(Data.MMENTRY) := pc
-              // mmexit written in onJump
-              output(Data.MM_WRITE_BOUNDS) := True
-
-              output(Data.MMAC) := 1
-              output(Data.MM_WRITE_AC) := True
-            }
-          }
-
-          // 2) Is the current program counter registered as the entry address?
-          when(pc === mmentry) {
-            // TODO: assert AC > 0
-            output(Data.MMAC) := AC + 1
-            output(Data.MM_WRITE_AC) := True
-          }
-
-          // 3) Is the current program counter registered as the exit address?
-          when(!reactivation) {
-            when(pc === mmexit) {
-              when(AC === 1) {
-                // We are exiting mimicry mode
-                output(Data.MMENTRY) := CSR_MMADDR_NONE
-                output(Data.MMEXIT) := CSR_MMADDR_NONE
-                output(Data.MM_WRITE_BOUNDS) := True
-              }
-
-              // TODO: assert AC > 0
-              output(Data.MMAC) := AC - 1
-              output(Data.MM_WRITE_AC) := True
-            }
-          }
-
-          // 4) Do we need to mimic the execution?
-          when(value(Data.MIMIC)) {
-            output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-          }
-
-          when(value(Data.GHOST)) {
-            when((AC === 0) || isExit) {
-              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-            }
-          } elsewhen (!value(Data.PERSISTENT)) {
-            when((AC > 0) && (!isExit)) {
-              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-            }
-          }
+//          val reactivation = False
+//
+//          val isExit = (AC === 1) && (pc === mmexit)
+//
+//          // 1) Is mimicry mode disabled?
+//          when((AC === 0) || isExit) {
+//
+//            // 1.1) Are we dealing with an activating jump?
+//            when(value(Data.AJUMP)) {
+//              reactivation := True
+//
+//              output(Data.MMENTRY) := pc
+//              output(Data.MMEXIT) := input(pipeline.data.NEXT_PC)
+//              output(Data.MM_WRITE_BOUNDS) := True
+//
+//              output(Data.MMAC) := 1
+//              output(Data.MM_WRITE_AC) := True
+//            }
+//
+//            // 1.2) Are we dealing with an activating branch?
+//            when(value(Data.ABRANCH) && value(Data.OUTCOME)) {
+//              reactivation := True
+//
+//              output(Data.MMENTRY) := pc
+//              // mmexit written in onJump
+//              output(Data.MM_WRITE_BOUNDS) := True
+//
+//              output(Data.MMAC) := 1
+//              output(Data.MM_WRITE_AC) := True
+//            }
+//          }
+//
+//          // 2) Is the current program counter registered as the entry address?
+//          when(pc === mmentry) {
+//            // TODO: assert AC > 0
+//            output(Data.MMAC) := AC + 1
+//            output(Data.MM_WRITE_AC) := True
+//          }
+//
+//          // 3) Is the current program counter registered as the exit address?
+//          when(!reactivation) {
+//            when(pc === mmexit) {
+//              when(AC === 1) {
+//                // We are exiting mimicry mode
+//                output(Data.MMENTRY) := CSR_MMADDR_NONE
+//                output(Data.MMEXIT) := CSR_MMADDR_NONE
+//                output(Data.MM_WRITE_BOUNDS) := True
+//              }
+//
+//              // TODO: assert AC > 0
+//              output(Data.MMAC) := AC - 1
+//              output(Data.MM_WRITE_AC) := True
+//            }
+//          }
+//
+//          // 4) Do we need to mimic the execution?
+//          when(value(Data.MIMIC)) {
+//            output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+//          }
+//
+//          when(value(Data.GHOST)) {
+//            when((AC === 0) || isExit) {
+//              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+//            }
+//          } elsewhen (!value(Data.PERSISTENT)) {
+//            when((AC > 0) && (!isExit)) {
+//              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+//            }
+//          }
         }
       }
     }
@@ -294,14 +293,14 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
       val mmexit = slave(new CsrIo)
 
       when(arbitration.isRunning) {
-        when(value(Data.MM_WRITE_BOUNDS)) {
-          mmentry.write(value(Data.MMENTRY))
-          mmexit.write(value(Data.MMEXIT))
-        }
+//        when(value(Data.MM_WRITE_BOUNDS)) {
+        mmentry.write(value(Data.MMENTRY))
+        mmexit.write(value(Data.MMEXIT))
+//        }
 
-        when(value(Data.MM_WRITE_AC)) {
-          mmAC.write(value(Data.MMAC))
-        }
+//        when(value(Data.MM_WRITE_AC)) {
+        mmAC.write(value(Data.MMAC))
+//        }
       }
     }
 
@@ -319,93 +318,122 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     stage.input(Data.MMEXIT) := mmex
   }
 
-  override def finish(): Unit = {
-    pipeline plug new Area {
-      val csrService = pipeline.service[CsrService]
+//  override def finish(): Unit = {
+//    pipeline plug new Area {
+//      val csrService = pipeline.service[CsrService]
+//
+//      def readOnlyCsr(csrId: Int): CsrIo = {
+//        val csr = csrService.getCsr(csrId)
+//        csr.write := False
+//        csr.wdata.assignDontCare()
+//        csr
+//      }
+//
+//      val mmAC = readOnlyCsr(CSR_MMAC)
+//      val mmentry = readOnlyCsr(CSR_MMENTRY)
+//      val mmexit = readOnlyCsr(CSR_MMEXIT)
 
-      def readOnlyCsr(csrId: Int): CsrIo = {
-        val csr = csrService.getCsr(csrId)
-        csr.write := False
-        csr.wdata.assignDontCare()
-        csr
-      }
+  // Connect current CSR values to the inputs of exeStage. If there are updated values later in
+  // the pipeline, they will be forwarded below.
+  //      for (exeStage <- exeStages) {
+  //        exeStage.input(Data.MMAC) := mmAC.read()
+  //        exeStage.input(Data.MMENTRY) := mmentry.read()
+  //        exeStage.input(Data.MMEXIT) := mmexit.read()
+//    }
 
-      val mmAC = readOnlyCsr(CSR_MMAC)
-      val mmentry = readOnlyCsr(CSR_MMENTRY)
-      val mmexit = readOnlyCsr(CSR_MMEXIT)
+  //    pipeline
+  //      .service[DataHazardService]
+  //      .resolveHazard((stage, nextStages) => {
+  //        // Forward values written to the CSRs from later stages to the exeStage. Since only exeStage
+  //        // reads those values, we don't have to forward to other stages.
+  //        if (stage == exeStage) {
+  //          for (laterStage <- nextStages.reverse) {
+  //            when(laterStage.output(Data.MM_WRITE_AC)) {
+  //              stage.input(Data.MMAC) := laterStage.output(Data.MMAC)
+  //            }
+  //
+  //            when(laterStage.output(Data.MM_WRITE_BOUNDS)) {
+  //              stage.input(Data.MMENTRY) := laterStage.output(Data.MMENTRY)
+  //              stage.input(Data.MMEXIT) := laterStage.output(Data.MMEXIT)
+  //            }
+  //          }
+  //        }
+  //
+  //        // We never need to stall.
+  //        False
+  //      })
+  //
+  //    pipeline
+  //      .service[DataHazardService]
+  //      .resolveHazard((stage, nextStages) => {
+  //        val stall = False
+  //
+  //        def mimicStall(
+  //                        rsNeeded: Bool,
+  //                        rs: PipelineData[UInt],
+  //                        rsType: PipelineData[SpinalEnumCraft[RegisterType.type]]
+  //                      ): Unit = {
+  //          if (stage.hasInput(rs)) {
+  //            val readRs = stage.input(rs)
+  //
+  //            when(rsNeeded && readRs =/= 0) {
+  //              val readRegType = stage.input(rsType)
+  //              val readMimicGpr = readRegType === MimicryRegisterType.MIMIC_GPR
+  //
+  //              for (laterStage <- nextStages.reverse) {
+  //                val writeRd = laterStage.input(pipeline.data.RD)
+  //                val writeRegType = laterStage.input(pipeline.data.RD_TYPE)
+  //                val writeNone = writeRegType === RegisterType.NONE
+  //                val writeMimicGpr = writeRegType === MimicryRegisterType.MIMIC_GPR
+  //
+  //                // We only need to check for additional stalls if either the register read or the
+  //                // register write is mimicked (or both). Otherwise, we either dealing with normal
+  //                // GPR-GPR dependencies which are handled by the data hazard resolver.
+  //                val checkStall =
+  //                (readRs === writeRd) && !writeNone && (writeMimicGpr || readMimicGpr)
+  //
+  //                when(laterStage.arbitration.isValid && checkStall) {
+  //                  stall := !laterStage.input(pipeline.data.RD_DATA_VALID)
+  //                }
+  //              }
+  //            }
+  //          }
+  //        }
+  //
+  //        mimicStall(stage.arbitration.rs1Needed, pipeline.data.RS1, pipeline.data.RS1_TYPE)
+  //        mimicStall(stage.arbitration.rs2Needed, pipeline.data.RS2, pipeline.data.RS2_TYPE)
+  //
+  //        stall
+  //      })
+//  }
 
-      // Connect current CSR values to the inputs of exeStage. If there are updated values later in
-      // the pipeline, they will be forwarded below.
-      //      for (exeStage <- exeStages) {
-      //        exeStage.input(Data.MMAC) := mmAC.read()
-      //        exeStage.input(Data.MMENTRY) := mmentry.read()
-      //        exeStage.input(Data.MMEXIT) := mmexit.read()
-    }
-
-    //    pipeline
-    //      .service[DataHazardService]
-    //      .resolveHazard((stage, nextStages) => {
-    //        // Forward values written to the CSRs from later stages to the exeStage. Since only exeStage
-    //        // reads those values, we don't have to forward to other stages.
-    //        if (stage == exeStage) {
-    //          for (laterStage <- nextStages.reverse) {
-    //            when(laterStage.output(Data.MM_WRITE_AC)) {
-    //              stage.input(Data.MMAC) := laterStage.output(Data.MMAC)
-    //            }
-    //
-    //            when(laterStage.output(Data.MM_WRITE_BOUNDS)) {
-    //              stage.input(Data.MMENTRY) := laterStage.output(Data.MMENTRY)
-    //              stage.input(Data.MMEXIT) := laterStage.output(Data.MMEXIT)
-    //            }
-    //          }
-    //        }
-    //
-    //        // We never need to stall.
-    //        False
-    //      })
-    //
-    //    pipeline
-    //      .service[DataHazardService]
-    //      .resolveHazard((stage, nextStages) => {
-    //        val stall = False
-    //
-    //        def mimicStall(
-    //                        rsNeeded: Bool,
-    //                        rs: PipelineData[UInt],
-    //                        rsType: PipelineData[SpinalEnumCraft[RegisterType.type]]
-    //                      ): Unit = {
-    //          if (stage.hasInput(rs)) {
-    //            val readRs = stage.input(rs)
-    //
-    //            when(rsNeeded && readRs =/= 0) {
-    //              val readRegType = stage.input(rsType)
-    //              val readMimicGpr = readRegType === MimicryRegisterType.MIMIC_GPR
-    //
-    //              for (laterStage <- nextStages.reverse) {
-    //                val writeRd = laterStage.input(pipeline.data.RD)
-    //                val writeRegType = laterStage.input(pipeline.data.RD_TYPE)
-    //                val writeNone = writeRegType === RegisterType.NONE
-    //                val writeMimicGpr = writeRegType === MimicryRegisterType.MIMIC_GPR
-    //
-    //                // We only need to check for additional stalls if either the register read or the
-    //                // register write is mimicked (or both). Otherwise, we either dealing with normal
-    //                // GPR-GPR dependencies which are handled by the data hazard resolver.
-    //                val checkStall =
-    //                (readRs === writeRd) && !writeNone && (writeMimicGpr || readMimicGpr)
-    //
-    //                when(laterStage.arbitration.isValid && checkStall) {
-    //                  stall := !laterStage.input(pipeline.data.RD_DATA_VALID)
-    //                }
-    //              }
-    //            }
-    //          }
-    //        }
-    //
-    //        mimicStall(stage.arbitration.rs1Needed, pipeline.data.RS1, pipeline.data.RS1_TYPE)
-    //        mimicStall(stage.arbitration.rs2Needed, pipeline.data.RS2, pipeline.data.RS2_TYPE)
-    //
-    //        stall
-    //      })
+  override def isGhost(stage: Stage): Bool = {
+    stage.output(Data.GHOST)
   }
 
+  override def isPersistent(stage: Stage): Bool = {
+    stage.output(Data.PERSISTENT)
+  }
+
+  override def setMimicked(stage: Stage): Unit = {
+    stage plug new Area {
+      stage.output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+    }
+  }
+
+  override def isMimic(stage: Stage): Bool = {
+    stage.output(Data.MIMIC)
+  }
+
+  override def isABranch(stage: Stage): Bool = {
+    stage.output(Data.ABRANCH)
+  }
+
+  override def isAJump(stage: Stage): Bool = {
+    stage.output(Data.AJUMP)
+  }
+
+  override def isActivating(stage: Stage): Bool = {
+    isAJump(stage) || isABranch(stage)
+  }
 }

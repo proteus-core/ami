@@ -439,6 +439,18 @@ trait DataHazardService {
 }
 
 trait MimicryService {
+  def isGhost(stage: Stage): Bool
+
+  def isPersistent(stage: Stage): Bool
+
+  def setMimicked(stage: Stage): Unit
+
+  def isMimic(stage: Stage): Bool
+
+  def isABranch(stage: Stage): Bool
+
+  def isAJump(stage: Stage): Bool
+
   def isActivating(stage: Stage): Bool
 
   def inputMeta(stage: Stage, mmac: UInt, mmen: UInt, mmex: UInt): Unit
