@@ -2,6 +2,7 @@ package riscv.plugins.scheduling.dynamic
 
 import riscv._
 import riscv.plugins.mimicry.MimicryRegisterType
+import riscv.plugins.mimicry.MimicryRegisterType.MIMIC_GPR
 import spinal.core._
 import spinal.lib.{Counter, Flow}
 
@@ -263,7 +264,7 @@ class ReorderBuffer(
       .element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
   }
 
-  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage]) = {
+  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage], Flow[CdbMessage]) = {
     val found = Bool()
     val target = Flow(CdbMessage(metaRegisters, indexBits))
     target.valid := False
@@ -271,63 +272,72 @@ class ReorderBuffer(
     target.payload.writeValue := 0
     found := False
 
+    val mimicTarget = Flow(CdbMessage(metaRegisters, indexBits))
+    mimicTarget.valid := False
+    mimicTarget.payload.robIndex := 0
+    mimicTarget.payload.writeValue := 0
+
     // loop through valid values and return the freshest if present
     for (relative <- 0 until capacity) {
       val absolute = UInt(indexBits)
       absolute := absoluteIndexForRelative(relative).resized
       val entry = robEntries(absolute)
+      val registerType =
+        entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
 
       // last condition: prevent dependencies on x0
       when(
         isValidAbsoluteIndex(absolute)
           && entry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === regId
           && regId =/= 0
-          && entry.registerMap.element(
-            pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
-          ) === RegisterType.GPR
+          && registerType === RegisterType.GPR || registerType === MIMIC_GPR
       ) {
-        found := True
-        target.valid := entry.hasValue
-        target.robIndex := absolute
-        target.writeValue := entry.registerMap.elementAs[UInt](
-          pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
-        )
+        when(robEntries(absolute).isMimicked) {
+          found := True
+          target.valid := entry.hasValue
+          target.robIndex := absolute
+          target.writeValue := entry.registerMap.elementAs[UInt](
+            pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
+          )
+        } otherwise {
+          mimicTarget.valid := !entry.hasValue // We want to track if it is hasn't finished executing yet
+          mimicTarget.robIndex := absolute
+          mimicTarget.writeValue := entry.registerMap.elementAs[UInt](
+            pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
+          )
+        }
       }
     }
-    (found, target)
+    (found, target, mimicTarget)
   }
 
-  def hasMimicryDependency(robIndex: UInt, regId: UInt): Flow[UInt] = {
+  def hasMimicryDependency(robIndex: UInt): Flow[UInt] = {
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
-//    for (nth <- 0 until capacity) {
-//      val entry = robEntries(nth)
-//      val index = UInt(indexBits)
-//      index := nth
-//
-//      val sameTarget = entry.registerMap.elementAs[UInt](
-//        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
-//      ) === robEntries(robIndex).registerMap
-//        .elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]])
-//      val differentMimicryContext = (entry.mimicryExit.valid || robEntries(
-//        robIndex
-//      ).mimicryExit.valid) && (entry.mimicryExit.payload =/= robEntries(
-//        robIndex
-//      ).mimicryExit.payload)
-//      val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
-//      val isInProgress = !entry.ready
-//
-//      when(
-//        isValidAbsoluteIndex(nth)
-//          && isOlder
-//          && sameTarget
-//          && differentMimicryContext
-//          && isInProgress
-//      ) {
-//        result.push(nth)
-//      }
-//    }
+    for (nth <- 0 until capacity) {
+      val entry = robEntries(nth)
+      val index = UInt(indexBits)
+      index := nth
+
+      val sameTarget = entry.registerMap.elementAs[UInt](
+        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+      ) === robEntries(robIndex).registerMap
+        .elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]])
+      val differentMimicryContext = entry.isMimicked =/= robEntries(robIndex).isMimicked
+      val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
+      val isInProgress = !entry.ready
+
+      when(
+        isValidAbsoluteIndex(nth)
+          && isOlder
+          && sameTarget
+          && differentMimicryContext
+          && isInProgress
+      ) {
+        result.push(nth)
+      }
+    }
     result
   }
 
