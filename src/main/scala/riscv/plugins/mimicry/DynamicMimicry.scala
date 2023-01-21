@@ -416,9 +416,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   }
 
   override def setMimicked(stage: Stage): Unit = {
-    stage plug new Area {
-      stage.output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-    }
+    stage.input(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
   }
 
   override def isMimic(stage: Stage): Bool = {

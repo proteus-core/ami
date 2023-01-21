@@ -157,7 +157,6 @@ class ReservationStation(
         // to ensure we start executing when execute() is called in the same
         // cycle as (one of) its arguments arrive(s) via processUpdate().
         state := State.EXECUTING
-        // TODO: update mimicry registers again? or can this lead to false alarms?
       }
     }
   }
@@ -259,7 +258,7 @@ class ReservationStation(
       }
     }
 
-    val (robIndex, (mmac, mmen, mmex)) = rob.pushEntry(
+    val (robIndex, mimicked, (mmac, mmen, mmex)) = rob.pushEntry(
       issueStage.output(pipeline.data.RD),
       issueStage.output(pipeline.data.RD_TYPE),
       pipeline.service[LsuService].operationOutput(issueStage),
@@ -269,6 +268,9 @@ class ReservationStation(
 
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
       mimicry.inputMeta(exeStage, mmac, mmen, mmex)
+      when(mimicked) {
+        mimicry.setMimicked(exeStage)
+      }
       when(mimicry.isActivating(issueStage)) {
         rob.newActivating(robIndex, nextPc)
       }
@@ -278,7 +280,6 @@ class ReservationStation(
 
     stateNext := State.EXECUTING
     regs.shift := True
-    // TODO: update mimicry registers here
 
     meta.reset()
 
@@ -314,7 +315,6 @@ class ReservationStation(
             regs.setReg(regData, rsValue.payload.writeValue)
           } otherwise {
             metaRs.priorInstructionNext.push(rsValue.payload.robIndex)
-            // TODO: even if waiting for possible new value, set old value in pipeline registers
           }
         } otherwise {
           regs.setReg(regData, issueStage.output(regData))

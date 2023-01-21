@@ -160,11 +160,10 @@ class ReorderBuffer(
       lsuOperationType: SpinalEnumCraft[LsuOperationType.type],
       pc: UInt,
       nextPc: UInt
-  ): (UInt, (UInt, UInt, UInt)) = {
+  ): (UInt, Bool, (UInt, UInt, UInt)) = {
     pushInCycle := True
     pushedEntry.ready := False
     pushedEntry.hasValue := False
-    pushedEntry.isMimicked := False
     pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := pc
     pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := rd
     pushedEntry.registerMap.element(
@@ -173,6 +172,8 @@ class ReorderBuffer(
     pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
 
+    val isMimicked = Bool()
+    isMimicked := False
     val newinternalMMAC = UInt(config.xlen bits)
     val newinternalMMEN = UInt(config.xlen bits)
     val newinternalMMEX = UInt(config.xlen bits)
@@ -234,28 +235,26 @@ class ReorderBuffer(
 
       // 4) Do we need to mimic the execution?
       when(mimicry.isMimic(issueStage)) {
-        pushedEntry.isMimicked := True
-        mimicry.setMimicked(issueStage)
+        isMimicked := True
       }
 
       when(mimicry.isGhost(issueStage)) {
         when((internalMMAC === 0) || isExit) {
-          pushedEntry.isMimicked := True
-          mimicry.setMimicked(issueStage)
+          isMimicked := True
         }
       } elsewhen (!mimicry.isPersistent(issueStage)) {
         when((internalMMAC > 0) && (!isExit)) {
-          pushedEntry.isMimicked := True
-          mimicry.setMimicked(issueStage)
+          isMimicked := True
         }
       }
 
       internalMMAC := newinternalMMAC
       internalMMEN := newinternalMMEN
       internalMMEX := newinternalMMEX
+      pushedEntry.isMimicked := isMimicked
     }
 
-    (newestIndex.value, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
+    (newestIndex.value, isMimicked, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
@@ -266,11 +265,12 @@ class ReorderBuffer(
 
   def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage], Flow[CdbMessage]) = {
     val found = Bool()
+    found := False
+
     val target = Flow(CdbMessage(metaRegisters, indexBits))
     target.valid := False
     target.payload.robIndex := 0
     target.payload.writeValue := 0
-    found := False
 
     val mimicTarget = Flow(CdbMessage(metaRegisters, indexBits))
     mimicTarget.valid := False
@@ -289,20 +289,20 @@ class ReorderBuffer(
       when(
         isValidAbsoluteIndex(absolute)
           && entry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === regId
-          && regId =/= 0
-          && registerType === RegisterType.GPR || registerType === MIMIC_GPR
+          && regId =/= U(0)
+          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
         when(robEntries(absolute).isMimicked) {
+          mimicTarget.valid := !entry.hasValue // We want to track if it is hasn't finished executing yet
+          mimicTarget.robIndex := absolute
+          mimicTarget.writeValue := entry.registerMap.elementAs[UInt](
+            pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
+          )
+        } otherwise {
           found := True
           target.valid := entry.hasValue
           target.robIndex := absolute
           target.writeValue := entry.registerMap.elementAs[UInt](
-            pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
-          )
-        } otherwise {
-          mimicTarget.valid := !entry.hasValue // We want to track if it is hasn't finished executing yet
-          mimicTarget.robIndex := absolute
-          mimicTarget.writeValue := entry.registerMap.elementAs[UInt](
             pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
           )
         }
