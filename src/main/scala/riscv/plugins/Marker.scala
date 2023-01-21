@@ -30,4 +30,14 @@ class Marker() extends Plugin[Pipeline] {
       )
     }
   }
+
+  override def build(): Unit = {
+    for (stage <- pipeline.stages) {
+      if (stage != pipeline.fetchStage) {
+        stage plug new Area {
+          stage.output(Data.MARK)
+        }
+      }
+    }
+  }
 }

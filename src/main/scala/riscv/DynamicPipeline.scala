@@ -53,6 +53,7 @@ trait DynamicPipeline extends Pipeline {
       stage.output(data.RD_DATA_VALID)
       stage.output(data.RD_TYPE)
       stage.output(data.NEXT_PC)
+      stage.output(data.IMM)
       stage.value(data.RS1)
       stage.value(data.RS2)
       stage.value(data.RS1_TYPE)

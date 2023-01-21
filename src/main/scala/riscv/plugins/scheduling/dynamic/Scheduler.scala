@@ -77,8 +77,7 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
       issueStage.arbitration.isStalled := False
 
       when(
-        issueStage.arbitration.isValid && issueStage.arbitration.isReady && !rob
-          .waitingForActivating()
+        issueStage.arbitration.isValid && issueStage.arbitration.isReady
       ) {
         val fuMask = issueStage.output(PrivateRegisters.DEST_FU)
         val illegalInstruction = fuMask === 0
@@ -87,7 +86,7 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
 
         for ((rs, index) <- reservationStations.zipWithIndex) {
           context = context.elsewhen(
-            (fuMask(index) || illegalInstruction) && rs.isAvailable && rob.isAvailable
+            (fuMask(index) || illegalInstruction) && rs.isAvailable && rob.isAvailable && !rob.waitingForActivating()
           ) {
             rs.execute()
           }
