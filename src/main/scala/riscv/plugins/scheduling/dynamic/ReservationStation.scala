@@ -1,6 +1,7 @@
 package riscv.plugins.scheduling.dynamic
 
 import riscv._
+import riscv.plugins.mimicry.MimicryRegisterType
 import spinal.core._
 import spinal.lib.{Flow, Stream}
 
@@ -269,7 +270,7 @@ class ReservationStation(
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
       mimicry.inputMeta(exeStage, mmac, mmen, mmex)
       when(mimicked) {
-        mimicry.setMimicked(exeStage)
+        regs.setReg(pipeline.data.RD_TYPE, MimicryRegisterType.MIMIC_GPR)
       }
       when(mimicry.isActivating(issueStage)) {
         rob.newActivating(robIndex, nextPc)
