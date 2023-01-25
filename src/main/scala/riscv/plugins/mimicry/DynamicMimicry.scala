@@ -157,19 +157,20 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
       })
     }
 
-    pipeline.service[JumpService].onJump { (stage, _, _, jumpType) =>
-      if (jumpType == JumpType.Normal) {
-        when(stage.value(Data.ABRANCH)) {
-          pipeline.service[JumpService].disableJump(stage)
-          // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
-          //         (redundant with Data.MMEXIT)
-          stage.output(Data.OUTCOME) := True
-          stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
-        } otherwise {
-          pipeline.service[FetchService].flushCache(stage) // TODO do we need this?
-        }
-      }
-    }
+//    pipeline.service[JumpService].onJump { (stage, _, _, jumpType) =>
+//      if (jumpType == JumpType.Normal) {
+//        // TODO: do this as a plugin, disable JUMP_REQUESTED if activating branch
+//        when(stage.value(Data.ABRANCH)) {
+//          pipeline.service[JumpService].disableJump(stage)
+//          // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
+//          //         (redundant with Data.MMEXIT)
+//          stage.output(Data.OUTCOME) := True
+//          stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
+//        } otherwise {
+//          pipeline.service[FetchService].flushCache(stage) // TODO do we need this?
+//        }
+//      }
+//    }
 
     pipeline.service[BranchService].onBranch { (stage, _, taken) =>
       when(!taken && stage.value(Data.CTBRANCH)) {
@@ -201,6 +202,17 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
   override def build(): Unit = {
 //    // TODO: implement
+    val ret = pipeline.retirementStage
+    ret plug new Area {
+      import ret._
+      val disablingJumpA = Bool()
+      disablingJumpA := False
+
+      when(value(Data.ABRANCH)) {
+        pipeline.service[JumpService].disableJump(ret)
+        disablingJumpA := True
+      }
+    }
     for (exeStage <- exeStages) {
       exeStage plug new Area {
         import exeStage._
@@ -210,6 +222,11 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
           val mmexit = input(Data.MMEXIT)
           val mmentry = input(Data.MMENTRY)
           val pc = input(pipeline.data.PC)
+          input(Data.AJUMP)
+          input(Data.ABRANCH)
+
+          // disable jumps
+
 //          val reactivation = False
 //
 //          val isExit = (AC === 1) && (pc === mmexit)

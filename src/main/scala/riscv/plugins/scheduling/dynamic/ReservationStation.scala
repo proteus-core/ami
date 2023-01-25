@@ -272,9 +272,9 @@ class ReservationStation(
       when(mimicked) {
         regs.setReg(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]], MimicryRegisterType.MIMIC_GPR.craft())
       }
-      when(mimicry.isActivating(issueStage)) {
-        rob.newActivating(robIndex, nextPc)
-      }
+//      when(mimicry.isActivating(issueStage)) {
+//        rob.newActivating(robIndex, nextPc)
+//      }
     }
 
     robEntryIndex := robIndex

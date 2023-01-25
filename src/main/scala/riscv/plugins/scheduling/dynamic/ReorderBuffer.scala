@@ -73,6 +73,11 @@ class ReorderBuffer(
   val enCsr = readOnlyCsr(CSR_MMENTRY)
   val exCsr = readOnlyCsr(CSR_MMEXIT)
 
+  val debugPc = UInt(config.xlen bits)
+  debugPc := 0
+  val debugnewinternalen = UInt((config.xlen bits))
+  debugnewinternalen := 0
+
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
@@ -82,16 +87,16 @@ class ReorderBuffer(
     internalMMEX := exCsr.read()
     isFull := False
   }
-
-  def newActivating(index: UInt, exit: UInt): Unit = {
-    when(internalMMAC === 0) {
-      pendingActivating.push(index)
-      internalMMAC := 1
-      internalMMEN := robEntries(index).registerMap
-        .elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
-      internalMMEX := exit
-    }
-  }
+//
+//  def newActivating(index: UInt, exit: UInt): Unit = {
+//    when(internalMMAC === 0) {
+//      pendingActivating.push(index)
+//      internalMMAC := 1
+//      internalMMEN := robEntries(index).registerMap
+//        .elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
+//      internalMMEX := exit
+//    }
+//  }
 
   def waitingForActivating(): Bool = {
     pendingActivating.valid
@@ -178,12 +183,15 @@ class ReorderBuffer(
     val newinternalMMEN = UInt(config.xlen bits)
     val newinternalMMEX = UInt(config.xlen bits)
 
+    debugPc := pc
+
     newinternalMMAC := internalMMAC
     newinternalMMEN := internalMMEN
     newinternalMMEX := internalMMEX
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
-      val reactivation = False
+      val reactivation = Bool()
+      reactivation := False
 
       val isExit = (internalMMAC === 1) && (pc === internalMMEX)
 
@@ -194,6 +202,7 @@ class ReorderBuffer(
 
         // 1.1) Are we dealing with an activating jump?
         when(mimicry.isAJump(issueStage)) {
+          pendingActivating.push(newestIndex.value)
           reactivation := True
 
           newinternalMMEN := pc
@@ -203,6 +212,7 @@ class ReorderBuffer(
 
         // 1.2) Are we dealing with an activating branch?
         when(mimicry.isABranch(issueStage)) { // originally only if branch is taken, we stall to find out the result, if not taken, AC needs to be reset to 0
+          pendingActivating.push(newestIndex.value)
           reactivation := True
 
           newinternalMMEN := pc
@@ -252,6 +262,8 @@ class ReorderBuffer(
       internalMMEN := newinternalMMEN
       internalMMEX := newinternalMMEX
       pushedEntry.isMimicked := isMimicked
+
+      debugnewinternalen := newinternalMMEN
     }
 
     (newestIndex.value, isMimicked, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
