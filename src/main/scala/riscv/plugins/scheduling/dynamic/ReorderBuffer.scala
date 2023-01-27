@@ -88,7 +88,7 @@ class ReorderBuffer(
     newestIndex.clear()
     pendingActivating.setIdle()
     isFull := False
-    when(pendingActivating.valid && pendingActivating.payload =/= oldestIndex) {
+    when(!pendingActivating.valid || pendingActivating.payload =/= oldestIndex) {
       internalMMAC := acCsr.read()
       internalMMEN := enCsr.read()
       internalMMEX := exCsr.read()

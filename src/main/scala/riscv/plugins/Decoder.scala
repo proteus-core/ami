@@ -118,7 +118,6 @@ class Decoder(decodeStage: Stage) extends Plugin[Pipeline] with DecoderService {
       switch(ir) {
         for ((key, action) <- decodings) {
           is(key) {
-            applyAction(decodeStage, action)
 
             assert(
               instructionTypes.contains(key),
@@ -143,6 +142,8 @@ class Decoder(decodeStage: Stage) extends Plugin[Pipeline] with DecoderService {
             output(pipeline.data.RS1_TYPE) := instructionType.rs1Type
             output(pipeline.data.RS2_TYPE) := instructionType.rs2Type
             output(pipeline.data.RD_TYPE) := instructionType.rdType
+
+            applyAction(decodeStage, action)
 
             def updateReg(reg: PipelineData[UInt], value: Int) = {
               output(reg) := value

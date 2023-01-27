@@ -21,11 +21,13 @@ class Marker() extends Plugin[Pipeline] {
         )
       )
 
+      // TODO: discuss creating a new instruction type
       config.addDecoding(
         Opcodes.MARK,
         InstructionType.I,
         Map(
-          Data.MARK -> True
+          Data.MARK -> True,
+          pipeline.data.RD_TYPE -> RegisterType.NONE
         )
       )
     }
