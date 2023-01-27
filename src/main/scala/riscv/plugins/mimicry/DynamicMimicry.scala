@@ -175,6 +175,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     pipeline.service[BranchService].onBranch { (stage, _, taken) =>
       when(!taken && stage.value(Data.CTBRANCH)) {
         stage.arbitration.jumpRequested := True
+        pipeline.service[JumpService].jumpRequested(stage) := True
         pipeline.service[FetchService].flushCache(stage)
       }
     }
@@ -188,6 +189,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     pipeline.retirementStage.output(Data.MMAC)
     pipeline.retirementStage.output(Data.MMENTRY)
     pipeline.retirementStage.output(Data.MMEXIT)
+    pipeline.retirementStage.output(Data.CTBRANCH)
 
     if (config.debug) {
       // Needed for the tests
@@ -460,5 +462,13 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
   override def exOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt = {
     bundle.elementAs[UInt](Data.MMEXIT.asInstanceOf[PipelineData[Data]])
+  }
+
+  override def isCtBranchOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): Bool = {
+    bundle.elementAs[Bool](Data.CTBRANCH.asInstanceOf[PipelineData[Data]])
+  }
+
+  override def isSensitiveBranch(stage: Stage): Bool = {
+    stage.output(Data.CTBRANCH) || stage.output(Data.ABRANCH)
   }
 }

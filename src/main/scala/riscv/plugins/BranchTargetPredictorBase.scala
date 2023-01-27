@@ -113,9 +113,13 @@ abstract class BranchTargetPredictorBase(fetchStage: Stage, jumpStage: Stage)
         arbitration.isDone &&
           !predictionWasCorrect(value(pipeline.data.NEXT_PC), value(Data.PREDICTED_PC))
       ) {
-        jumpIo.mispredicted := True
-        jumpIo.currentPc := value(pipeline.data.PC)
-        jumpIo.target := value(pipeline.data.NEXT_PC)
+        pipeline.serviceOption[MimicryService].foreach { mimicry =>
+          when(!mimicry.isSensitiveBranch(jumpStage)) {
+            jumpIo.mispredicted := True
+            jumpIo.currentPc := value(pipeline.data.PC)
+            jumpIo.target := value(pipeline.data.NEXT_PC)
+          }
+        }
 
         // HACK this forces the jump service to restart the pipeline from NEXT_PC
         jumpService.jumpRequested(jumpStage) := True

@@ -439,6 +439,8 @@ trait DataHazardService {
 }
 
 trait MimicryService {
+  def isCtBranchOfBundle(registerMap: Bundle with DynBundleAccess[PipelineData[Data]]): Bool
+
   def isGhost(stage: Stage): Bool
 
   def isPersistent(stage: Stage): Bool
@@ -458,6 +460,8 @@ trait MimicryService {
   def enOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
 
   def acOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
+
+  def isSensitiveBranch(stage: Stage): Bool
 }
 
 trait FormalService {

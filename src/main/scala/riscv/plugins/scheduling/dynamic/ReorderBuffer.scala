@@ -465,6 +465,12 @@ class ReorderBuffer(
         pendingActivating.setIdle()
 //        }
       }
+
+      pipeline.serviceOption[MimicryService].foreach { mimicry =>
+        when(mimicry.isCtBranchOfBundle(oldestEntry.registerMap)) {
+          pipeline.service[FetchService].flushCache(ret)
+        }
+      }
     }
 
     when(!isEmpty && oldestEntry.ready && ret.arbitration.isDone) {
