@@ -157,20 +157,20 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
       })
     }
 
-//    pipeline.service[JumpService].onJump { (stage, _, _, jumpType) =>
-//      if (jumpType == JumpType.Normal) {
-//        // TODO: do this as a plugin, disable JUMP_REQUESTED if activating branch
-//        when(stage.value(Data.ABRANCH)) {
-//          pipeline.service[JumpService].disableJump(stage)
-//          // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
-//          //         (redundant with Data.MMEXIT)
-//          stage.output(Data.OUTCOME) := True
-//          stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
-//        } otherwise {
-//          pipeline.service[FetchService].flushCache(stage) // TODO do we need this?
-//        }
-//      }
-//    }
+    //    pipeline.service[JumpService].onJump { (stage, _, _, jumpType) =>
+    //      if (jumpType == JumpType.Normal) {
+    //        // TODO: do this as a plugin, disable JUMP_REQUESTED if activating branch
+    //        when(stage.value(Data.ABRANCH)) {
+    //          pipeline.service[JumpService].disableJump(stage)
+    //          // TODO: Get rid of Data.OUTCOME, Data.ABRANCH
+    //          //         (redundant with Data.MMEXIT)
+    //          stage.output(Data.OUTCOME) := True
+    //          stage.output(Data.MMEXIT) := stage.value(pipeline.data.NEXT_PC)
+    //        } otherwise {
+    //          pipeline.service[FetchService].flushCache(stage) // TODO do we need this?
+    //        }
+    //      }
+    //    }
 
     pipeline.service[BranchService].onBranch { (stage, _, taken) =>
       when(!taken && stage.value(Data.CTBRANCH)) {
@@ -201,7 +201,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   }
 
   override def build(): Unit = {
-//    // TODO: implement
+    //    // TODO: implement
     val ret = pipeline.retirementStage
     ret plug new Area {
       import ret._
@@ -227,75 +227,75 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
           // disable jumps
 
-//          val reactivation = False
-//
-//          val isExit = (AC === 1) && (pc === mmexit)
-//
-//          // 1) Is mimicry mode disabled?
-//          when((AC === 0) || isExit) {
-//
-//            // 1.1) Are we dealing with an activating jump?
-//            when(value(Data.AJUMP)) {
-//              reactivation := True
-//
-//              output(Data.MMENTRY) := pc
-//              output(Data.MMEXIT) := input(pipeline.data.NEXT_PC)
-//              output(Data.MM_WRITE_BOUNDS) := True
-//
-//              output(Data.MMAC) := 1
-//              output(Data.MM_WRITE_AC) := True
-//            }
-//
-//            // 1.2) Are we dealing with an activating branch?
-//            when(value(Data.ABRANCH) && value(Data.OUTCOME)) {
-//              reactivation := True
-//
-//              output(Data.MMENTRY) := pc
-//              // mmexit written in onJump
-//              output(Data.MM_WRITE_BOUNDS) := True
-//
-//              output(Data.MMAC) := 1
-//              output(Data.MM_WRITE_AC) := True
-//            }
-//          }
-//
-//          // 2) Is the current program counter registered as the entry address?
-//          when(pc === mmentry) {
-//            // TODO: assert AC > 0
-//            output(Data.MMAC) := AC + 1
-//            output(Data.MM_WRITE_AC) := True
-//          }
-//
-//          // 3) Is the current program counter registered as the exit address?
-//          when(!reactivation) {
-//            when(pc === mmexit) {
-//              when(AC === 1) {
-//                // We are exiting mimicry mode
-//                output(Data.MMENTRY) := CSR_MMADDR_NONE
-//                output(Data.MMEXIT) := CSR_MMADDR_NONE
-//                output(Data.MM_WRITE_BOUNDS) := True
-//              }
-//
-//              // TODO: assert AC > 0
-//              output(Data.MMAC) := AC - 1
-//              output(Data.MM_WRITE_AC) := True
-//            }
-//          }
-//
-//          // 4) Do we need to mimic the execution?
-//          when(value(Data.MIMIC)) {
-//            output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-//          }
-//
-//          when(value(Data.GHOST)) {
-//            when((AC === 0) || isExit) {
-//              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-//            }
-//          } elsewhen (!value(Data.PERSISTENT)) {
-//            when((AC > 0) && (!isExit)) {
-//              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
-//            }
-//          }
+          //          val reactivation = False
+          //
+          //          val isExit = (AC === 1) && (pc === mmexit)
+          //
+          //          // 1) Is mimicry mode disabled?
+          //          when((AC === 0) || isExit) {
+          //
+          //            // 1.1) Are we dealing with an activating jump?
+          //            when(value(Data.AJUMP)) {
+          //              reactivation := True
+          //
+          //              output(Data.MMENTRY) := pc
+          //              output(Data.MMEXIT) := input(pipeline.data.NEXT_PC)
+          //              output(Data.MM_WRITE_BOUNDS) := True
+          //
+          //              output(Data.MMAC) := 1
+          //              output(Data.MM_WRITE_AC) := True
+          //            }
+          //
+          //            // 1.2) Are we dealing with an activating branch?
+          //            when(value(Data.ABRANCH) && value(Data.OUTCOME)) {
+          //              reactivation := True
+          //
+          //              output(Data.MMENTRY) := pc
+          //              // mmexit written in onJump
+          //              output(Data.MM_WRITE_BOUNDS) := True
+          //
+          //              output(Data.MMAC) := 1
+          //              output(Data.MM_WRITE_AC) := True
+          //            }
+          //          }
+          //
+          //          // 2) Is the current program counter registered as the entry address?
+          //          when(pc === mmentry) {
+          //            // TODO: assert AC > 0
+          //            output(Data.MMAC) := AC + 1
+          //            output(Data.MM_WRITE_AC) := True
+          //          }
+          //
+          //          // 3) Is the current program counter registered as the exit address?
+          //          when(!reactivation) {
+          //            when(pc === mmexit) {
+          //              when(AC === 1) {
+          //                // We are exiting mimicry mode
+          //                output(Data.MMENTRY) := CSR_MMADDR_NONE
+          //                output(Data.MMEXIT) := CSR_MMADDR_NONE
+          //                output(Data.MM_WRITE_BOUNDS) := True
+          //              }
+          //
+          //              // TODO: assert AC > 0
+          //              output(Data.MMAC) := AC - 1
+          //              output(Data.MM_WRITE_AC) := True
+          //            }
+          //          }
+          //
+          //          // 4) Do we need to mimic the execution?
+          //          when(value(Data.MIMIC)) {
+          //            output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+          //          }
+          //
+          //          when(value(Data.GHOST)) {
+          //            when((AC === 0) || isExit) {
+          //              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+          //            }
+          //          } elsewhen (!value(Data.PERSISTENT)) {
+          //            when((AC > 0) && (!isExit)) {
+          //              output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+          //            }
+          //          }
         }
       }
     }
@@ -309,15 +309,15 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
       val mmentry = slave(new CsrIo)
       val mmexit = slave(new CsrIo)
 
-      when(arbitration.isRunning) {
-//        when(value(Data.MM_WRITE_BOUNDS)) {
+      when(arbitration.isDone) {
+        //        when(value(Data.MM_WRITE_BOUNDS)) {
         mmentry.write(value(Data.MMENTRY))
         mmexit.write(value(Data.MMEXIT))
-//        }
+        //        }
 
-//        when(value(Data.MM_WRITE_AC)) {
+        //        when(value(Data.MM_WRITE_AC)) {
         mmAC.write(value(Data.MMAC))
-//        }
+        //        }
       }
     }
 
@@ -329,26 +329,32 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     }
   }
 
+  override def inputMeta(regs: PipelineRegs, mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
+    regs.setReg(Data.MMAC, mmac)
+    regs.setReg(Data.MMENTRY, mmen)
+    regs.setReg(Data.MMEXIT, mmex)
+  }
+
   override def inputMeta(stage: Stage, mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
     stage.input(Data.MMAC) := mmac
     stage.input(Data.MMENTRY) := mmen
     stage.input(Data.MMEXIT) := mmex
   }
 
-//  override def finish(): Unit = {
-//    pipeline plug new Area {
-//      val csrService = pipeline.service[CsrService]
-//
-//      def readOnlyCsr(csrId: Int): CsrIo = {
-//        val csr = csrService.getCsr(csrId)
-//        csr.write := False
-//        csr.wdata.assignDontCare()
-//        csr
-//      }
-//
-//      val mmAC = readOnlyCsr(CSR_MMAC)
-//      val mmentry = readOnlyCsr(CSR_MMENTRY)
-//      val mmexit = readOnlyCsr(CSR_MMEXIT)
+  //  override def finish(): Unit = {
+  //    pipeline plug new Area {
+  //      val csrService = pipeline.service[CsrService]
+  //
+  //      def readOnlyCsr(csrId: Int): CsrIo = {
+  //        val csr = csrService.getCsr(csrId)
+  //        csr.write := False
+  //        csr.wdata.assignDontCare()
+  //        csr
+  //      }
+  //
+  //      val mmAC = readOnlyCsr(CSR_MMAC)
+  //      val mmentry = readOnlyCsr(CSR_MMENTRY)
+  //      val mmexit = readOnlyCsr(CSR_MMEXIT)
 
   // Connect current CSR values to the inputs of exeStage. If there are updated values later in
   // the pipeline, they will be forwarded below.
@@ -356,7 +362,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   //        exeStage.input(Data.MMAC) := mmAC.read()
   //        exeStage.input(Data.MMENTRY) := mmentry.read()
   //        exeStage.input(Data.MMEXIT) := mmexit.read()
-//    }
+  //    }
 
   //    pipeline
   //      .service[DataHazardService]
@@ -422,7 +428,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   //
   //        stall
   //      })
-//  }
+  //  }
 
   override def isGhost(stage: Stage): Bool = {
     stage.output(Data.GHOST)
@@ -430,10 +436,6 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
   override def isPersistent(stage: Stage): Bool = {
     stage.output(Data.PERSISTENT)
-  }
-
-  override def setMimicked(stage: Stage): Unit = {
-    stage.input(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
   }
 
   override def isMimic(stage: Stage): Bool = {
@@ -446,9 +448,5 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
   override def isAJump(stage: Stage): Bool = {
     stage.output(Data.AJUMP)
-  }
-
-  override def isActivating(stage: Stage): Bool = {
-    isAJump(stage) || isABranch(stage)
   }
 }

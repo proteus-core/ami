@@ -268,9 +268,12 @@ class ReservationStation(
     )
 
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
-      mimicry.inputMeta(exeStage, mmac, mmen, mmex)
+      mimicry.inputMeta(regs, mmac, mmen, mmex)
       when(mimicked) {
-        regs.setReg(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]], MimicryRegisterType.MIMIC_GPR.craft())
+        regs.setReg(
+          pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]],
+          MimicryRegisterType.MIMIC_GPR.craft()
+        )
       }
 //      when(mimicry.isActivating(issueStage)) {
 //        rob.newActivating(robIndex, nextPc)

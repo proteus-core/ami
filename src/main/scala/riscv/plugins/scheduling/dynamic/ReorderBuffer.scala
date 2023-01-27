@@ -73,19 +73,26 @@ class ReorderBuffer(
   val enCsr = readOnlyCsr(CSR_MMENTRY)
   val exCsr = readOnlyCsr(CSR_MMEXIT)
 
-  val debugPc = UInt(config.xlen bits)
-  debugPc := 0
-  val debugnewinternalen = UInt((config.xlen bits))
-  debugnewinternalen := 0
+  val debugcsr = UInt((config.xlen bits))
+  debugcsr := acCsr.read()
+
+  val debugincajump = Bool()
+  debugincajump := False
+  val debugincabranch = Bool()
+  debugincabranch := False
+  val debugincaa = Bool()
+  debugincaa := False
 
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
     pendingActivating.setIdle()
-    internalMMAC := acCsr.read()
-    internalMMEN := enCsr.read()
-    internalMMEX := exCsr.read()
     isFull := False
+    when(pendingActivating.valid && pendingActivating.payload =/= oldestIndex) {
+      internalMMAC := acCsr.read()
+      internalMMEN := enCsr.read()
+      internalMMEX := exCsr.read()
+    }
   }
 //
 //  def newActivating(index: UInt, exit: UInt): Unit = {
@@ -183,8 +190,6 @@ class ReorderBuffer(
     val newinternalMMEN = UInt(config.xlen bits)
     val newinternalMMEX = UInt(config.xlen bits)
 
-    debugPc := pc
-
     newinternalMMAC := internalMMAC
     newinternalMMEN := internalMMEN
     newinternalMMEX := internalMMEX
@@ -208,6 +213,8 @@ class ReorderBuffer(
           newinternalMMEN := pc
           newinternalMMEX := nextPc // this is pc + 4
           newinternalMMAC := 1
+
+          debugincajump := True
         }
 
         // 1.2) Are we dealing with an activating branch?
@@ -218,6 +225,8 @@ class ReorderBuffer(
           newinternalMMEN := pc
           newinternalMMEX := nextPc // this is the target, not confirmed yet, originally not written
           newinternalMMAC := 1
+
+          debugincabranch := True
         }
       }
 
@@ -225,6 +234,7 @@ class ReorderBuffer(
       when(pc === internalMMEN && internalMMAC > 0) {
         // TODO: assert internalMMAC > 0
         newinternalMMAC := internalMMAC + 1
+        debugincaa := True
       }
 
       // 3) Is the current program counter registered as the exit address?
@@ -262,8 +272,6 @@ class ReorderBuffer(
       internalMMEN := newinternalMMEN
       internalMMEX := newinternalMMEX
       pushedEntry.isMimicked := isMimicked
-
-      debugnewinternalen := newinternalMMEN
     }
 
     (newestIndex.value, isMimicked, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
@@ -327,6 +335,12 @@ class ReorderBuffer(
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
+    val targetReg = robEntries(robIndex).registerMap.element(
+      pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
+    ) === RegisterType.GPR || robEntries(robIndex).registerMap.element(
+      pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
+    ) === MIMIC_GPR
+
     for (nth <- 0 until capacity) {
       val entry = robEntries(nth)
       val index = UInt(indexBits)
@@ -340,12 +354,17 @@ class ReorderBuffer(
       val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
       val isInProgress = !entry.ready
 
+      val registerType =
+        entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
+
       when(
         isValidAbsoluteIndex(nth)
           && isOlder
           && sameTarget
           && differentMimicryContext
           && isInProgress
+          && targetReg
+          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
         result.push(nth)
       }
@@ -419,17 +438,19 @@ class ReorderBuffer(
     when(!isEmpty && oldestEntry.ready) {
       ret.arbitration.isValid := True
 
-      // TODO: should all these changes for mimicry registers come here?
-      pipeline.serviceOption[MimicryService].foreach { mimicry =>
-        when(pendingActivating.valid && pendingActivating.payload === oldestIndex) {
-          when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
-            // mimicry mode activated
-          } otherwise {
-            internalMMAC := 0
-            mimicry.inputMeta(ret, 0, 0, 0)
+      when(pendingActivating.valid && pendingActivating.payload === oldestIndex) {
+        when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
+          // mimicry mode activated
+        } otherwise {
+          internalMMAC := 0 // acCsr.read()
+          internalMMEN := enCsr.read()
+          internalMMEX := exCsr.read()
+          pipeline.serviceOption[MimicryService].foreach { mimicry =>
+            mimicry.inputMeta(ret, 0, enCsr.read(), exCsr.read())
           }
-          pendingActivating.setIdle()
         }
+        pendingActivating.setIdle()
+//        }
       }
     }
 
