@@ -174,9 +174,9 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
     pipeline.service[BranchService].onBranch { (stage, _, taken) =>
       when(!taken && stage.value(Data.CTBRANCH)) {
-        stage.arbitration.jumpRequested := True
+        stage.arbitration.jumpRequested := True // probably not needed
         pipeline.service[JumpService].jumpRequested(stage) := True
-        pipeline.service[FetchService].flushCache(stage)
+//        pipeline.service[FetchService].flushCache(stage)
       }
     }
 
