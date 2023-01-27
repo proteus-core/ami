@@ -452,6 +452,12 @@ trait MimicryService {
   def inputMeta(regs: PipelineRegs, mmac: UInt, mmen: UInt, mmex: UInt): Unit
 
   def inputMeta(stage: Stage, mmac: UInt, mmen: UInt, mmex: UInt): Unit
+
+  def exOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
+
+  def enOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
+
+  def acOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
 }
 
 trait FormalService {

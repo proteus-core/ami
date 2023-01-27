@@ -449,4 +449,16 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   override def isAJump(stage: Stage): Bool = {
     stage.output(Data.AJUMP)
   }
+
+  override def acOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt = {
+    bundle.elementAs[UInt](Data.MMAC.asInstanceOf[PipelineData[Data]])
+  }
+
+  override def enOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt = {
+    bundle.elementAs[UInt](Data.MMENTRY.asInstanceOf[PipelineData[Data]])
+  }
+
+  override def exOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt = {
+    bundle.elementAs[UInt](Data.MMEXIT.asInstanceOf[PipelineData[Data]])
+  }
 }

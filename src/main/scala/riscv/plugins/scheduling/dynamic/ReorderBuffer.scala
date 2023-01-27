@@ -89,9 +89,22 @@ class ReorderBuffer(
     pendingActivating.setIdle()
     isFull := False
     when(!pendingActivating.valid || pendingActivating.payload =/= oldestIndex) {
-      internalMMAC := acCsr.read()
-      internalMMEN := enCsr.read()
-      internalMMEX := exCsr.read()
+      when(
+        robEntries(oldestIndex).ready && pipeline
+          .service[JumpService]
+          .jumpOfBundle(robEntries(oldestIndex).registerMap)
+      ) {
+        pipeline.serviceOption[MimicryService].foreach { mimicry =>
+          // coudl also take it from stage output i guess
+          internalMMAC := mimicry.acOfBundle(robEntries(oldestIndex).registerMap)
+          internalMMEN := mimicry.enOfBundle(robEntries(oldestIndex).registerMap)
+          internalMMEX := mimicry.exOfBundle(robEntries(oldestIndex).registerMap)
+        }
+      } otherwise {
+        internalMMAC := acCsr.read()
+        internalMMEN := enCsr.read()
+        internalMMEX := exCsr.read()
+      }
     }
   }
 //
