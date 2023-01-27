@@ -142,7 +142,7 @@ class ReservationStation(
 
       when(currentM2Prior.valid && cdbMessage.robIndex === currentM2Prior.payload) {
         meta.mdep_rs2.priorInstruction.valid := False
-        m1w := False
+        m2w := False
       }
 
       when(currentCryPrior.valid && cdbMessage.robIndex === currentCryPrior.payload) {
