@@ -52,6 +52,7 @@ class ReorderBuffer(
   pushedEntry := RobEntry(retirementRegisters).getZero
 
   val pendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
+  val dummyPendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
   val internalMMAC = RegInit(UInt(config.xlen bits).getZero)
   val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
   val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
@@ -87,6 +88,7 @@ class ReorderBuffer(
     oldestIndex.clear()
     newestIndex.clear()
     pendingActivating.setIdle()
+    dummyPendingActivating.setIdle()
     isFull := False
     when(!pendingActivating.valid || pendingActivating.payload =/= oldestIndex) {
       when(
@@ -107,19 +109,9 @@ class ReorderBuffer(
       }
     }
   }
-//
-//  def newActivating(index: UInt, exit: UInt): Unit = {
-//    when(internalMMAC === 0) {
-//      pendingActivating.push(index)
-//      internalMMAC := 1
-//      internalMMEN := robEntries(index).registerMap
-//        .elementAs[UInt](pipeline.data.PC.asInstanceOf[PipelineData[Data]])
-//      internalMMEX := exit
-//    }
-//  }
 
   def waitingForActivating(): Bool = {
-    pendingActivating.valid
+    pendingActivating.valid || dummyPendingActivating.valid
   }
 
   def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -215,31 +207,16 @@ class ReorderBuffer(
 
       val issueStage = pipeline.issuePipeline.stages.last
 
-      // 1) Is mimicry mode disabled?
-      when((internalMMAC === 0) || isExit) {
-
-        // 1.1) Are we dealing with an activating jump?
-        when(mimicry.isAJump(issueStage)) {
+      when(mimicry.isAJump(issueStage) || mimicry.isABranch(issueStage)) {
+        when((internalMMAC === 0) || isExit) {
           pendingActivating.push(newestIndex.value)
           reactivation := True
 
           newinternalMMEN := pc
           newinternalMMEX := nextPc // this is pc + 4
           newinternalMMAC := 1
-
-          debugincajump := True
-        }
-
-        // 1.2) Are we dealing with an activating branch?
-        when(mimicry.isABranch(issueStage)) { // originally only if branch is taken, we stall to find out the result, if not taken, AC needs to be reset to 0
-          pendingActivating.push(newestIndex.value)
-          reactivation := True
-
-          newinternalMMEN := pc
-          newinternalMMEX := nextPc // this is the target, not confirmed yet, originally not written
-          newinternalMMAC := 1
-
-          debugincabranch := True
+        } otherwise {
+          dummyPendingActivating.push(newestIndex.value)
         }
       }
 
@@ -464,6 +441,10 @@ class ReorderBuffer(
         }
         pendingActivating.setIdle()
 //        }
+      }
+
+      when (dummyPendingActivating.valid && dummyPendingActivating.payload === oldestIndex) {
+        dummyPendingActivating.setIdle()
       }
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
