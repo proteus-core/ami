@@ -321,42 +321,31 @@ class ReorderBuffer(
     (found, target, mimicTarget)
   }
 
-  def hasMimicryDependency(robIndex: UInt): Flow[UInt] = {
+  def hasMimicryDependency(regId: UInt, mimicked: Bool): Flow[UInt] = {
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
-    val targetReg = robEntries(robIndex).registerMap.element(
-      pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
-    ) === RegisterType.GPR || robEntries(robIndex).registerMap.element(
-      pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
-    ) === MIMIC_GPR
+    for (relative <- 0 until capacity) {
+      val absolute = UInt(indexBits)
+      absolute := absoluteIndexForRelative(relative).resized
 
-    for (nth <- 0 until capacity) {
-      val entry = robEntries(nth)
-      val index = UInt(indexBits)
-      index := nth
+      val entry = robEntries(absolute)
 
-      val sameTarget = entry.registerMap.elementAs[UInt](
-        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
-      ) === robEntries(robIndex).registerMap
-        .elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]])
-      val differentMimicryContext = entry.isMimicked =/= robEntries(robIndex).isMimicked
-      val isOlder = relativeIndexForAbsolute(index) < relativeIndexForAbsolute(robIndex)
+      val sameTarget = entry.registerMap.elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === regId
+      val differentMimicryContext = entry.isMimicked =/= mimicked
       val isInProgress = !entry.ready
 
       val registerType =
         entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
 
       when(
-        isValidAbsoluteIndex(nth)
-          && isOlder
+        isValidAbsoluteIndex(absolute)
           && sameTarget
           && differentMimicryContext
           && isInProgress
-          && targetReg
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
-        result.push(nth)
+        result.push(absolute)
       }
     }
     result

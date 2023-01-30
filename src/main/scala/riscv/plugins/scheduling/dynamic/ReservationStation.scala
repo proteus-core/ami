@@ -288,8 +288,8 @@ class ReservationStation(
     meta.reset()
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
-      when(issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
-        val mimicryDep = rob.hasMimicryDependency(robIndex)
+      when(issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR || issueStage.output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR) {
+        val mimicryDep = rob.hasMimicryDependency(issueStage.output(pipeline.data.RD), mimicked)
         when(mimicryDep.valid) {
           meta.mdep_write.priorInstructionNext.push(mimicryDep.payload)
           stateNext := State.WAITING_FOR_ARGS
