@@ -94,6 +94,7 @@ def llvm_disassemble(bytez):
 def llvm_disassemble_mc(bytez):
   mc  = "/home/hans/kul/phd/morpheus/llvm-project/install/bin/llvm-mc"
   mc += " --arch=riscv32"
+  mc += " --mattr=+m"
   mc += " --mdis"
 
   p = subprocess.Popen(mc.split(),
