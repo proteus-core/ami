@@ -211,7 +211,7 @@ object createDynamicPipeline {
         new DynamicMemoryBackbone(
           log2Up(pipeline.loadStages.size + 1) bits
         ), // +1 for write stage (which also uses an ID currently)
-        new Fetcher(pipeline.issuePipeline.fetch)
+        new Fetcher(pipeline.issuePipeline.fetch, 10)
       )
     )
 
