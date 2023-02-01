@@ -122,9 +122,7 @@ class ReorderBuffer(
     oldest := oldestIndex.value
     newest := newestIndex.value
 
-    when(index >= capacity) {
-      ret := False
-    } elsewhen (isFull) {
+    when(isFull) {
       ret := True
     } elsewhen (oldest === newest && !isFull) { // empty
       ret := False
