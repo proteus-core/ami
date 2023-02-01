@@ -24,14 +24,14 @@ class ProteusVCD:
     # Build the signal namespace
     self.vcd = vcdvcd.VCDVCD(vcdname, only_sigs=True)
     self.TOP = self.build_signal_namespace()
-    self.PL  = self.TOP.Core.pipeline_1
-    self.ID  = self.TOP.Core.pipeline_1.decode
-    self.WB  = self.TOP.Core.pipeline_1.writeback
-    self.EX  = self.TOP.Core.pipeline_1.execute
-    self.MEM = self.TOP.Core.pipeline_1.memory
-    self.RF  = self.TOP.Core.pipeline_1.RegisterFileAccessor
-    self.RF  = self.TOP.Core.pipeline_1.RegisterFileAccessor
-    self.CSR = self.TOP.Core.pipeline_1.CsrFile_1
+    self.PL  = self.TOP.Core.pipeline
+    self.ID  = self.TOP.Core.pipeline.decode
+    self.WB  = self.TOP.Core.pipeline.writeback
+    self.EX  = self.TOP.Core.pipeline.execute
+    self.MEM = self.TOP.Core.pipeline.memory
+    self.RF  = self.TOP.Core.pipeline.RegisterFileAccessor
+    self.RF  = self.TOP.Core.pipeline.RegisterFileAccessor
+    self.CSR = self.TOP.Core.pipeline.CsrFile
 
     # Load the data for the signals we are interested in.
     # The empty list selects all signals.
@@ -73,7 +73,7 @@ class ProteusVCD:
 
     # WB
     # TODO: Clean this up (unify WB and WB2)
-    signal = self.signal(self.TOP.Core.pipeline_1.writeback_out_PC)
+    signal = self.signal(self.TOP.Core.pipeline.writeback_out_PC)
     self.WB2 = {}
     for t, pc in [(t, int(v, 2)) for (t, v) in signal.tv]:
       if not pc in self.WB2:
