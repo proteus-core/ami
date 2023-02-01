@@ -319,6 +319,9 @@ trait BranchService {
 
 trait BranchTargetPredictorService {
   def predictedPc(stage: Stage): UInt
+  def predictionForAddress(
+      address: UInt
+  ): UInt // TODO: should it be Flow[UInt] to signal no prediction instead of forcing + 4?
   def setPredictedPc(stage: Stage, pc: UInt): Unit
 }
 
