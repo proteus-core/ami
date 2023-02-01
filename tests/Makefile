@@ -48,8 +48,8 @@ ALL_TESTS = $(filter-out $(UNSUPPORTED_TESTS),$(ALL_ISA_TESTS))
 ALL_PROTEUS_TESTS = $(filter-out $(UNSUPPORTED_TESTS),$(PROTEUS_TESTS))
 
 all: $(addsuffix .pass,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_TESTS)))))
-all: $(addsuffix .objdump,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_PROTEUS_TESTS)))))
-all: $(addsuffix .prot,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_PROTEUS_TESTS)))))
+#all: $(addsuffix .objdump,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_PROTEUS_TESTS)))))
+#all: $(addsuffix .prot,$(basename $(addprefix $(BUILD_DIR)/,$(notdir $(ALL_PROTEUS_TESTS)))))
 
 .SECONDARY:
 

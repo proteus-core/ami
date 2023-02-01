@@ -329,7 +329,9 @@ class ReorderBuffer(
 
       val entry = robEntries(absolute)
 
-      val sameTarget = entry.registerMap.elementAs[UInt](pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === regId
+      val sameTarget = entry.registerMap.elementAs[UInt](
+        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+      ) === regId
       val differentMimicryContext = entry.isMimicked =/= mimicked
       val isInProgress = !entry.ready
 
@@ -430,7 +432,7 @@ class ReorderBuffer(
 //        }
       }
 
-      when (dummyPendingActivating.valid && dummyPendingActivating.payload === oldestIndex) {
+      when(dummyPendingActivating.valid && dummyPendingActivating.payload === oldestIndex) {
         dummyPendingActivating.setIdle()
       }
 
