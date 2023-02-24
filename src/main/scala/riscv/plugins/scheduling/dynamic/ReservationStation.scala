@@ -259,7 +259,7 @@ class ReservationStation(
       }
     }
 
-    val (robIndex, mimicked, (mmac, mmen, mmex)) = rob.pushEntry(
+    val (robIndex, mimicDependency, (mmac, mmen, mmex)) = rob.pushEntry(
       issueStage.output(pipeline.data.RD),
       issueStage.output(pipeline.data.RD_TYPE),
       pipeline.service[LsuService].operationOutput(issueStage),
@@ -269,7 +269,7 @@ class ReservationStation(
 
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
       mimicry.inputMeta(regs, mmac, mmen, mmex)
-      when(mimicked) {
+      when(mimicDependency.valid) { // TODO: incorrect
         regs.setReg(
           pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]],
           MimicryRegisterType.MIMIC_GPR.craft()
@@ -292,7 +292,7 @@ class ReservationStation(
         issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR || issueStage
           .output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
       ) {
-        val mimicryDep = rob.hasMimicryDependency(issueStage.output(pipeline.data.RD), mimicked)
+        val mimicryDep = rob.hasMimicryDependency(issueStage.output(pipeline.data.RD), mimicDependency)
         when(mimicryDep.valid) {
           meta.mdep_write.priorInstructionNext.push(mimicryDep.payload)
           stateNext := State.WAITING_FOR_ARGS

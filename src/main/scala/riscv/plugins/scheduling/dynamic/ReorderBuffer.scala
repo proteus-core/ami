@@ -6,16 +6,16 @@ import riscv.plugins.mimicry.MimicryRegisterType.MIMIC_GPR
 import spinal.core._
 import spinal.lib.{Counter, Flow}
 
-case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]])(implicit config: Config)
+case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBits: BitCount)(implicit config: Config)
     extends Bundle {
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
     retirementRegisters.createBundle
   val ready = Bool()
   val hasValue = Bool()
-  val isMimicked = Bool()
+  val mimicDependency = Flow(UInt(indexBits))
 
   override def clone(): RobEntry = {
-    RobEntry(retirementRegisters)
+    RobEntry(retirementRegisters, indexBits)
   }
 }
 
@@ -38,7 +38,7 @@ class ReorderBuffer(
   def capacity: Int = robCapacity
   def indexBits: BitCount = log2Up(capacity) bits
 
-  val robEntries = Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters).getZero))
+  val robEntries = Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters, indexBits).getZero))
   val oldestIndex = Counter(capacity)
   val newestIndex = Counter(capacity)
   private val isFullNext = Bool()
@@ -48,11 +48,12 @@ class ReorderBuffer(
 
   val pushInCycle = Bool()
   pushInCycle := False
-  val pushedEntry = RobEntry(retirementRegisters)
-  pushedEntry := RobEntry(retirementRegisters).getZero
+  val pushedEntry = RobEntry(retirementRegisters, indexBits)
+  pushedEntry := RobEntry(retirementRegisters, indexBits).getZero
 
+  val activatingShadow = RegInit(Flow(UInt(indexBits)).setIdle())  // TODO: assign
   val pendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
-  val dummyPendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
+  val dummyPendingActivating = RegInit(Flow(UInt(indexBits)).setIdle()) // To keep track of activating instructions that arrive during AC > 0
   val internalMMAC = RegInit(UInt(config.xlen bits).getZero)
   val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
   val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
@@ -74,16 +75,6 @@ class ReorderBuffer(
   val enCsr = readOnlyCsr(CSR_MMENTRY)
   val exCsr = readOnlyCsr(CSR_MMEXIT)
 
-  val debugcsr = UInt((config.xlen bits))
-  debugcsr := acCsr.read()
-
-  val debugincajump = Bool()
-  debugincajump := False
-  val debugincabranch = Bool()
-  debugincabranch := False
-  val debugincaa = Bool()
-  debugincaa := False
-
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
@@ -97,7 +88,7 @@ class ReorderBuffer(
           .jumpOfBundle(robEntries(oldestIndex).registerMap)
       ) {
         pipeline.serviceOption[MimicryService].foreach { mimicry =>
-          // coudl also take it from stage output i guess
+          // could also take it from stage output i guess
           internalMMAC := mimicry.acOfBundle(robEntries(oldestIndex).registerMap)
           internalMMEN := mimicry.enOfBundle(robEntries(oldestIndex).registerMap)
           internalMMEX := mimicry.exOfBundle(robEntries(oldestIndex).registerMap)
@@ -159,23 +150,13 @@ class ReorderBuffer(
     adjusted
   }
 
-  def previousIndexFor(index: UInt): UInt = {
-    val previous = UInt()
-    when(index === 0) {
-      previous := capacity - 1
-    } otherwise {
-      previous := index - 1
-    }
-    previous
-  }
-
   def pushEntry(
       rd: UInt,
       rdType: SpinalEnumCraft[RegisterType.type],
       lsuOperationType: SpinalEnumCraft[LsuOperationType.type],
       pc: UInt,
       nextPc: UInt
-  ): (UInt, Bool, (UInt, UInt, UInt)) = {
+  ): (UInt, Flow[UInt], (UInt, UInt, UInt)) = {
     pushInCycle := True
     pushedEntry.ready := False
     pushedEntry.hasValue := False
@@ -187,8 +168,8 @@ class ReorderBuffer(
     pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
 
-    val isMimicked = Bool()
-    isMimicked := False
+    val mimicDependency = Flow(UInt(indexBits))
+    mimicDependency.setIdle()
     val newinternalMMAC = UInt(config.xlen bits)
     val newinternalMMEN = UInt(config.xlen bits)
     val newinternalMMEX = UInt(config.xlen bits)
@@ -220,49 +201,38 @@ class ReorderBuffer(
 
       // 2) Is the current program counter registered as the entry address?
       when(pc === internalMMEN && internalMMAC > 0) {
-        // TODO: assert internalMMAC > 0
         newinternalMMAC := internalMMAC + 1
-        debugincaa := True
       }
 
       // 3) Is the current program counter registered as the exit address?
       when(!reactivation) {
         when(pc === internalMMEX && internalMMAC > 0) {
-          // we don't care about all this if
-//          when(internalMMAC === 1) {
-//            // We are exiting mimicry mode
-//            output(Data.MMENTRY) := CSR_MMADDR_NONE
-//            output(Data.MMEXIT) := CSR_MMADDR_NONE
-//            output(Data.MM_WRITE_BOUNDS) := True
-//          }
-
-          // TODO: assert internalMMAC > 0
           newinternalMMAC := internalMMAC - 1
         }
       }
 
       // 4) Do we need to mimic the execution?
       when(mimicry.isMimic(issueStage)) {
-        isMimicked := True
+        mimicDependency.push(activatingShadow.payload)
       }
 
       when(mimicry.isGhost(issueStage)) {
         when((internalMMAC === 0) || isExit) {
-          isMimicked := True
+          mimicDependency.push(activatingShadow.payload)
         }
       } elsewhen (!mimicry.isPersistent(issueStage)) {
         when((internalMMAC > 0) && (!isExit)) {
-          isMimicked := True
+          mimicDependency.push(activatingShadow.payload)
         }
       }
 
       internalMMAC := newinternalMMAC
       internalMMEN := newinternalMMEN
       internalMMEX := newinternalMMEX
-      pushedEntry.isMimicked := isMimicked
+      pushedEntry.mimicDependency := mimicDependency
     }
 
-    (newestIndex.value, isMimicked, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
+    (newestIndex.value, mimicDependency, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
@@ -300,7 +270,7 @@ class ReorderBuffer(
           && regId =/= U(0)
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
-        when(robEntries(absolute).isMimicked) {
+        when(robEntries(absolute).mimicDependency.valid) {
           mimicTarget.valid := !entry.hasValue // We want to track if it is hasn't finished executing yet
           mimicTarget.robIndex := absolute
           mimicTarget.writeValue := entry.registerMap.elementAs[UInt](
@@ -319,7 +289,7 @@ class ReorderBuffer(
     (found, target, mimicTarget)
   }
 
-  def hasMimicryDependency(regId: UInt, mimicked: Bool): Flow[UInt] = {
+  def hasMimicryDependency(regId: UInt, dependency: Flow[UInt]): Flow[UInt] = {
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
@@ -332,7 +302,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val differentMimicryContext = entry.isMimicked =/= mimicked
+      val differentMimicryContext = (entry.mimicDependency.valid =/= dependency.valid) || (entry.mimicDependency.valid && dependency.valid && entry.mimicDependency.payload =/= dependency.payload)
       val isInProgress = !entry.ready
 
       val registerType =
