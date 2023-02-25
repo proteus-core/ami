@@ -471,4 +471,6 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   override def isSensitiveBranch(stage: Stage): Bool = {
     stage.output(Data.CTBRANCH) || stage.output(Data.ABRANCH)
   }
+
+  // TODO: setMimicked(stage)?
 }

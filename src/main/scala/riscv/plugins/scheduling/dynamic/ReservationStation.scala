@@ -22,24 +22,25 @@ case class RegisterSource(indexBits: BitCount) extends Bundle {
 case class InstructionDependencies(indexBits: BitCount) extends Bundle {
   val rs1: RegisterSource = RegisterSource(indexBits)
   val rs2: RegisterSource = RegisterSource(indexBits)
-  val mdep_rs1: RegisterSource = RegisterSource(indexBits)
-  val mdep_rs2: RegisterSource = RegisterSource(indexBits)
-  val mdep_write: RegisterSource = RegisterSource(indexBits)
+  val rs1Waiting: Bool = RegInit(False)
+  val rs2Waiting: Bool = RegInit(False)
+  val pendingActivating: RegisterSource = RegisterSource(indexBits)
+  val previousWaw: RegisterSource = RegisterSource(indexBits)
 
   def build(): Unit = {
     rs1.build()
     rs2.build()
-    mdep_rs1.build()
-    mdep_rs2.build()
-    mdep_write.build()
+    pendingActivating.build()
+    previousWaw.build()
   }
 
   def reset(): Unit = {
     rs1.reset()
     rs2.reset()
-    mdep_rs1.reset()
-    mdep_rs2.reset()
-    mdep_write.reset()
+    rs1Waiting := False
+    rs2Waiting := False
+    pendingActivating.reset()
+    previousWaw.reset()
   }
 }
 
@@ -80,35 +81,38 @@ class ReservationStation(
     HardType(RdbMessage(retirementRegisters, rob.indexBits))
   )
 
-  private val regs = pipeline.pipelineRegs(exeStage) // TODO: do we need this?
+  private val regs = pipeline.pipelineRegs(exeStage)
 
   val isAvailable: Bool = Bool()
 
   val activeFlush: Bool = Bool()
 
+  val wawBuffer: Flow[UInt] = Reg(Flow(UInt(config.xlen bits)))
+
+  val mimicked = RegInit(False)
+
   def reset(): Unit = {
     isAvailable := !activeFlush
     stateNext := State.IDLE
     meta.reset()
+    wawBuffer.setIdle()
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
-    val currentRs1Prior, currentRs2Prior, currentM1Prior, currentM2Prior, currentCryPrior = Flow(
+    val currentRs1Prior, currentRs2Prior, currentPendingActivating, currentWaw = Flow(
       UInt(rob.indexBits)
     )
 
     when(state === State.WAITING_FOR_ARGS) {
       currentRs1Prior := meta.rs1.priorInstruction
       currentRs2Prior := meta.rs2.priorInstruction
-      currentM1Prior := meta.mdep_rs1.priorInstruction
-      currentM2Prior := meta.mdep_rs2.priorInstruction
-      currentCryPrior := meta.mdep_write.priorInstruction
+      currentPendingActivating := meta.pendingActivating.priorInstruction
+      currentWaw := meta.previousWaw.priorInstruction
     } otherwise {
       currentRs1Prior := meta.rs1.priorInstructionNext
       currentRs2Prior := meta.rs2.priorInstructionNext
-      currentM1Prior := meta.mdep_rs1.priorInstructionNext
-      currentM2Prior := meta.mdep_rs2.priorInstructionNext
-      currentCryPrior := meta.mdep_write.priorInstructionNext
+      currentPendingActivating := meta.pendingActivating.priorInstructionNext
+      currentWaw := meta.previousWaw.priorInstructionNext
     }
 
     when(state === State.WAITING_FOR_ARGS || stateNext === State.WAITING_FOR_ARGS) {
@@ -116,41 +120,63 @@ class ReservationStation(
       r1w := currentRs1Prior.valid
       val r2w = Bool()
       r2w := currentRs2Prior.valid
-      val m1w = Bool()
-      m1w := currentM1Prior.valid
-      val m2w = Bool()
-      m2w := currentM2Prior.valid
-      val cyw = Bool()
-      cyw := currentCryPrior.valid
+      val paw = Bool()
+      paw := currentPendingActivating.valid
+      val waw = Bool()
+      waw := currentWaw.valid
 
       when(currentRs1Prior.valid && cdbMessage.robIndex === currentRs1Prior.payload) {
-        meta.rs1.priorInstruction.valid := False
-        r1w := False
-        regs.setReg(pipeline.data.RS1_DATA, cdbMessage.writeValue)
+        when(meta.rs1Waiting && cdbMessage.realUpdate) {
+          // if the cdb contains the true register value
+          regs.setReg(pipeline.data.RS1_DATA, cdbMessage.writeValue)
+          meta.rs1Waiting := False
+        }
+        when(cdbMessage.previousWaw.valid) {
+          // if we still have to wait for the true value
+          meta.rs1.priorInstruction.push(cdbMessage.previousWaw.payload)
+        } otherwise {
+          meta.rs1.priorInstruction.valid := False
+          r1w := False
+        }
       }
 
       when(currentRs2Prior.valid && cdbMessage.robIndex === currentRs2Prior.payload) {
-        meta.rs2.priorInstruction.valid := False
-        r2w := False
-        regs.setReg(pipeline.data.RS2_DATA, cdbMessage.writeValue)
+        when(meta.rs2Waiting && cdbMessage.realUpdate) {
+          // if the cdb contains the true register value
+          regs.setReg(pipeline.data.RS2_DATA, cdbMessage.writeValue)
+          meta.rs2Waiting := False
+        }
+        when(cdbMessage.previousWaw.valid) {
+          // if we still have to wait for the true value
+          meta.rs2.priorInstruction.push(cdbMessage.previousWaw.payload)
+        } otherwise {
+          meta.rs2.priorInstruction.valid := False
+          r2w := False
+        }
       }
 
-      when(currentM1Prior.valid && cdbMessage.robIndex === currentM1Prior.payload) {
-        meta.mdep_rs1.priorInstruction.valid := False
-        m1w := False
+      when(currentPendingActivating.valid && cdbMessage.robIndex === currentPendingActivating.payload) {
+        meta.pendingActivating.priorInstruction.valid := False
+        // TODO: check for previousWaw here? assign only for dependent activating branches? even then... forwarded ac somehow? could just do an or, but what if exit inbetween? rob also can't know
+        when(cdbMessage.activatingTaken) {
+          mimicked := !mimicked
+        }
+        paw := False
       }
 
-      when(currentM2Prior.valid && cdbMessage.robIndex === currentM2Prior.payload) {
-        meta.mdep_rs2.priorInstruction.valid := False
-        m2w := False
+      when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
+        when(cdbMessage.realUpdate && !wawBuffer.valid) {
+          wawBuffer.push(cdbMessage.writeValue)
+        }
+        when(cdbMessage.previousWaw.valid) {
+          meta.previousWaw.priorInstruction.push(cdbMessage.previousWaw.payload)
+        } otherwise {
+          meta.previousWaw.priorInstruction.valid := False
+          waw := False
+        }
       }
 
-      when(currentCryPrior.valid && cdbMessage.robIndex === currentCryPrior.payload) {
-        meta.mdep_write.priorInstruction.valid := False
-        cyw := False
-      }
-
-      when(!r1w && !r2w && !m1w && !m2w && !cyw) {
+      when(!r1w && !r2w && !paw) {  // we don't have to wait for all waws to resolve here
         // This is the only place where state is written directly (instead of
         // via stateNext). This ensures that we have priority over whatever
         // execute() writes to it which means that the order of calling
@@ -197,7 +223,22 @@ class ReservationStation(
 
     // when waiting for the result, and it is ready, put in on the bus
     when(state === State.EXECUTING && exeStage.arbitration.isDone && !activeFlush) {
-      cdbStream.payload.writeValue := exeStage.output(pipeline.data.RD_DATA)
+      when(mimicked) { // TODO: this might have to be a register-combinatorial dual
+        regs.setReg(
+          pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]],
+          MimicryRegisterType.MIMIC_GPR.craft()
+        )
+      }
+
+      when(mimicked) {
+        cdbStream.payload.writeValue := wawBuffer.payload
+        cdbStream.payload.realUpdate := wawBuffer.valid
+      } otherwise {
+        cdbStream.payload.writeValue := exeStage.output(pipeline.data.RD_DATA)
+        cdbStream.payload.realUpdate := exeStage.output(pipeline.data.RD_DATA_VALID)
+      }
+
+      cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
 
       cdbStream.payload.robIndex := robEntryIndex
       dispatchStream.payload.robIndex := robEntryIndex
@@ -209,6 +250,15 @@ class ReservationStation(
       when(exeStage.output(pipeline.data.RD_DATA_VALID)) {
         cdbStream.valid := True
       }
+
+      pipeline.serviceOption[MimicryService].foreach {mimicry => {
+        when(mimicry.isABranch(exeStage) || mimicry.isAJump(exeStage)) {
+          cdbStream.valid := True
+          cdbStream.payload.activatingTaken := pipeline.service[JumpService].jumpRequested(exeStage)
+        }
+      }}
+
+
       dispatchStream.valid := True
 
       // Override the assignment of resultCdbMessage to make sure data can be sent in later cycles
@@ -255,9 +305,11 @@ class ReservationStation(
     // calculate next pc for activating jumps here
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
       when(mimicry.isABranch(issueStage)) {
-        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
+        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)  // TODO: we still need this, right?
       }
     }
+
+    mimicked := pipeline.service[MimicryService].isGhost(issueStage)
 
     val (robIndex, mimicDependency, (mmac, mmen, mmex)) = rob.pushEntry(
       issueStage.output(pipeline.data.RD),
@@ -267,42 +319,48 @@ class ReservationStation(
       nextPc
     )
 
-    pipeline.serviceOption[MimicryService] foreach { mimicry =>
-      mimicry.inputMeta(regs, mmac, mmen, mmex)
-      when(mimicDependency.valid) { // TODO: incorrect
-        regs.setReg(
-          pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]],
-          MimicryRegisterType.MIMIC_GPR.craft()
-        )
-      }
-//      when(mimicry.isActivating(issueStage)) {
-//        rob.newActivating(robIndex, nextPc)
+    // TODO: this whole thing is unnecessary?
+//    pipeline.serviceOption[MimicryService] foreach { mimicry =>
+//      mimicry.inputMeta(regs, mmac, mmen, mmex)
+//      when(mimicDependency.valid) { // TODO: incorrect
+//        regs.setReg(
+//          pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]],
+//          MimicryRegisterType.MIMIC_GPR.craft()
+//        )
 //      }
-    }
+////      when(mimicry.isActivating(issueStage)) {
+////        rob.newActivating(robIndex, nextPc)
+////      }
+//    }
 
     robEntryIndex := robIndex
 
     stateNext := State.EXECUTING
     regs.shift := True
 
-    meta.reset()
+    meta.reset() // TODO: is this needed? reset at the end of the previous anyway?
+
+    when(!pipeline.service[MimicryService].isPersistent(issueStage)) { // TODO: could also be determined in the ROB, not sure which one is better
+      meta.pendingActivating.priorInstructionNext.push(0)
+    }
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       when(
         issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR || issueStage
           .output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
       ) {
-        val mimicryDep = rob.hasMimicryDependency(issueStage.output(pipeline.data.RD), mimicDependency)
-        when(mimicryDep.valid) {
-          meta.mdep_write.priorInstructionNext.push(mimicryDep.payload)
-          stateNext := State.WAITING_FOR_ARGS
-        }
+        val mimicryDep =
+          rob.hasMimicryDependency(issueStage.output(pipeline.data.RD), mimicDependency)
+//        when(mimicryDep.valid) {
+//          meta.mdep_write.priorInstructionNext.push(mimicryDep.payload)
+//          stateNext := State.WAITING_FOR_ARGS
+//        }
       }
     }
 
     def dependencySetup(
         metaRs: RegisterSource,
-        mimicRs: RegisterSource,
+//        mimicRs: RegisterSource,
         reg: PipelineData[UInt],
         regData: PipelineData[UInt],
         regType: PipelineData[SpinalEnumCraft[RegisterType.type]]
@@ -313,9 +371,9 @@ class ReservationStation(
         val rsReg = issueStage.output(reg)
         val (rsInRob, rsValue, mimicTarget) = rob.findRegisterValue(rsReg)
 
-        when(mimicTarget.valid) {
-          mimicRs.priorInstructionNext.push(mimicTarget.payload.robIndex)
-        }
+//        when(mimicTarget.valid) {
+//          mimicRs.priorInstructionNext.push(mimicTarget.payload.robIndex)
+//        }
 
         when(rsInRob) {
           when(rsValue.valid) {
@@ -335,14 +393,14 @@ class ReservationStation(
 
     dependencySetup(
       meta.rs1,
-      meta.mdep_rs1,
+//      meta.mdep_rs1,
       pipeline.data.RS1,
       pipeline.data.RS1_DATA,
       pipeline.data.RS1_TYPE
     )
     dependencySetup(
       meta.rs2,
-      meta.mdep_rs2,
+//      meta.mdep_rs2,
       pipeline.data.RS2,
       pipeline.data.RS2_DATA,
       pipeline.data.RS2_TYPE

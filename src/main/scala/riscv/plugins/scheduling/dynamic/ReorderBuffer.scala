@@ -290,6 +290,7 @@ class ReorderBuffer(
   }
 
   def hasMimicryDependency(regId: UInt, dependency: Flow[UInt]): Flow[UInt] = {
+    // TODO: don't give it for persistent
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
