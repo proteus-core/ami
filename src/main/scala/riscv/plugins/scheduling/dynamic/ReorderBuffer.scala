@@ -6,8 +6,9 @@ import riscv.plugins.mimicry.MimicryRegisterType.MIMIC_GPR
 import spinal.core._
 import spinal.lib.{Counter, Flow}
 
-case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBits: BitCount)(implicit config: Config)
-    extends Bundle {
+case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBits: BitCount)(
+    implicit config: Config
+) extends Bundle {
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
     retirementRegisters.createBundle
   val ready = Bool()
@@ -37,10 +38,11 @@ class ReorderBuffer(
 )(implicit config: Config)
     extends Area
     with CdbListener {
-  def capacity: Int = robCapacity
+  private def capacity: Int = robCapacity
   def indexBits: BitCount = log2Up(capacity) bits
 
-  private val robEntries = Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters, indexBits).getZero))
+  private val robEntries =
+    Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters, indexBits).getZero))
   private val oldestIndex = Counter(capacity)
   private val newestIndex = Counter(capacity)
   private val isFullNext = Bool()
@@ -53,9 +55,7 @@ class ReorderBuffer(
   private val pushedEntry = RobEntry(retirementRegisters, indexBits)
   pushedEntry := RobEntry(retirementRegisters, indexBits).getZero
 
-  private val activatingShadow = RegInit(Flow(UInt(indexBits)).setIdle())  // TODO: assign
-  private val pendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
-  private val dummyPendingActivating = RegInit(Flow(UInt(indexBits)).setIdle()) // To keep track of activating instructions that arrive during AC > 0
+  private val activatingShadow = RegInit(Flow(UInt(indexBits)).setIdle()) // TODO: assign
   private val internalMMAC = RegInit(UInt(config.xlen bits).getZero)
   private val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
   private val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
@@ -80,31 +80,23 @@ class ReorderBuffer(
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
-    pendingActivating.setIdle()
-    dummyPendingActivating.setIdle()
     isFull := False
-    when(!pendingActivating.valid || pendingActivating.payload =/= oldestIndex) {
-      when(
-        robEntries(oldestIndex).ready && pipeline
-          .service[JumpService]
-          .jumpOfBundle(robEntries(oldestIndex).registerMap)
-      ) {
-        pipeline.serviceOption[MimicryService].foreach { mimicry =>
-          // could also take it from stage output i guess
-          internalMMAC := mimicry.acOfBundle(robEntries(oldestIndex).registerMap)
-          internalMMEN := mimicry.enOfBundle(robEntries(oldestIndex).registerMap)
-          internalMMEX := mimicry.exOfBundle(robEntries(oldestIndex).registerMap)
-        }
-      } otherwise {
-        internalMMAC := acCsr.read()
-        internalMMEN := enCsr.read()
-        internalMMEX := exCsr.read()
+    when(
+      robEntries(oldestIndex).ready && pipeline
+        .service[JumpService]
+        .jumpOfBundle(robEntries(oldestIndex).registerMap)
+    ) {
+      pipeline.serviceOption[MimicryService].foreach { mimicry =>
+        // could also take it from stage output i guess
+        internalMMAC := mimicry.acOfBundle(robEntries(oldestIndex).registerMap)
+        internalMMEN := mimicry.enOfBundle(robEntries(oldestIndex).registerMap)
+        internalMMEX := mimicry.exOfBundle(robEntries(oldestIndex).registerMap)
       }
+    } otherwise {
+      internalMMAC := acCsr.read()
+      internalMMEN := enCsr.read()
+      internalMMEX := exCsr.read()
     }
-  }
-
-  def waitingForActivating(): Bool = {
-    pendingActivating.valid || dummyPendingActivating.valid
   }
 
   private def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -172,13 +164,13 @@ class ReorderBuffer(
 
     val mimicDependency = Flow(UInt(indexBits))
     mimicDependency.setIdle()
-    val newinternalMMAC = UInt(config.xlen bits)
-    val newinternalMMEN = UInt(config.xlen bits)
-    val newinternalMMEX = UInt(config.xlen bits)
+    val newInternalMMAC = UInt(config.xlen bits)
+    val newInternalMMEN = UInt(config.xlen bits)
+    val newInternalMMEX = UInt(config.xlen bits)
 
-    newinternalMMAC := internalMMAC
-    newinternalMMEN := internalMMEN
-    newinternalMMEX := internalMMEX
+    newInternalMMAC := internalMMAC
+    newInternalMMEN := internalMMEN
+    newInternalMMEX := internalMMEX
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       val reactivation = Bool()
@@ -188,28 +180,27 @@ class ReorderBuffer(
 
       val issueStage = pipeline.issuePipeline.stages.last
 
-      when(mimicry.isAJump(issueStage) || mimicry.isABranch(issueStage)) {
+      when(mimicry.isActivating(issueStage)) {
+        pushedEntry.exitAddress.push(nextPc)
+
         when((internalMMAC === 0) || isExit) {
-          pendingActivating.push(newestIndex.value)
           reactivation := True
 
-          newinternalMMEN := pc
-          newinternalMMEX := nextPc // this is pc + 4
-          newinternalMMAC := 1
-        } otherwise {
-          dummyPendingActivating.push(newestIndex.value)
+          newInternalMMEN := pc
+          newInternalMMEX := nextPc
+          newInternalMMAC := 1
         }
       }
 
       // 2) Is the current program counter registered as the entry address?
       when(pc === internalMMEN && internalMMAC > 0) {
-        newinternalMMAC := internalMMAC + 1
+        newInternalMMAC := internalMMAC + 1
       }
 
       // 3) Is the current program counter registered as the exit address?
       when(!reactivation) {
         when(pc === internalMMEX && internalMMAC > 0) {
-          newinternalMMAC := internalMMAC - 1
+          newInternalMMAC := internalMMAC - 1
         }
       }
 
@@ -228,13 +219,13 @@ class ReorderBuffer(
         }
       }
 
-      internalMMAC := newinternalMMAC
-      internalMMEN := newinternalMMEN
-      internalMMEX := newinternalMMEX
+      internalMMAC := newInternalMMAC
+      internalMMEN := newInternalMMEN
+      internalMMEX := newInternalMMEX
       pushedEntry.shadowingActivating := mimicDependency
     }
 
-    (newestIndex.value, mimicDependency, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
+    (newestIndex.value, mimicDependency, (newInternalMMAC, newInternalMMEN, newInternalMMEX))
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
@@ -243,11 +234,32 @@ class ReorderBuffer(
       .element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
   }
 
+  private def findPreviousActiveActivating(): Flow[UInt] = {
+    val result = Flow(UInt(indexBits))
+    result.setIdle()
+
+    for (relative <- 0 until capacity) {
+      val absolute = UInt(indexBits)
+      absolute := absoluteIndexForRelative(relative).resized
+
+      val entry = robEntries(absolute)
+
+      when(
+        isValidAbsoluteIndex(
+          absolute
+        ) && entry.exitAddress.valid && (!activatingShadow.valid || absolute =/= activatingShadow.payload)
+      ) {
+        result.push(absolute)
+      }
+    }
+    result
+  }
+
   def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage]) = {
     val found = Bool()
     found := False
 
-    val target = Flow(CdbMessage(metaRegisters, indexBits))  // TODO: refactor this to not use cdb?
+    val target = Flow(CdbMessage(metaRegisters, indexBits)) // TODO: refactor this to not use cdb?
     target.valid := False
     target.payload.robIndex := 0
     target.payload.writeValue := 0
@@ -268,13 +280,13 @@ class ReorderBuffer(
           && regId =/= U(0)
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
-          found := True
-          target.valid := entry.hasValue
-          target.robIndex := absolute
+        found := True
+        target.valid := entry.hasValue
+        target.robIndex := absolute
         target.previousWaw := entry.previousWaw
-          target.writeValue := entry.registerMap.elementAs[UInt](
-            pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
-          )
+        target.writeValue := entry.registerMap.elementAs[UInt](
+          pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
+        )
         // TODO: need to check for WAW dependency and forward that
         // we probably also need to keep track of (and update) these in the ROB on each cdb update
       }
@@ -285,9 +297,6 @@ class ReorderBuffer(
   // TODO: wrapper function for these lookups? for (all) { condition(target, iter) ... }
 
   def findPreviousWaw(regId: UInt): Flow[UInt] = {
-//    find previous with same target (largely mimicrydependency fn), use the saved waw field to propagate
-
-    // TODO: don't give it for persistent
     val result = Flow(UInt(indexBits))
     result.setIdle()
 
@@ -300,7 +309,6 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-//      val differentMimicryContext = (entry.shadowingActivating.valid =/= dependency.valid) || (entry.shadowingActivating.valid && dependency.valid && entry.shadowingActivating.payload =/= dependency.payload)
       val isInProgress = !entry.ready
 
       val registerType =
@@ -309,7 +317,6 @@ class ReorderBuffer(
       when(
         isValidAbsoluteIndex(absolute)
           && sameTarget
-//          && differentMimicryContext
           && isInProgress
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
@@ -385,22 +392,15 @@ class ReorderBuffer(
     when(!isEmpty && oldestEntry.ready) {
       ret.arbitration.isValid := True
 
-      when(pendingActivating.valid && pendingActivating.payload === oldestIndex) {
-        when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
-          // mimicry mode activated
-        } otherwise {
-          internalMMAC := 0 // acCsr.read()
-          internalMMEN := enCsr.read()
-          internalMMEX := exCsr.read()
-          pipeline.serviceOption[MimicryService].foreach { mimicry =>
-            mimicry.inputMeta(ret, 0, enCsr.read(), exCsr.read())
-          }
+      when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
+        // mimicry mode activated
+      } otherwise {
+        internalMMAC := 0 // acCsr.read()
+        internalMMEN := enCsr.read()
+        internalMMEX := exCsr.read()
+        pipeline.serviceOption[MimicryService].foreach { mimicry =>
+          mimicry.inputMeta(ret, 0, enCsr.read(), exCsr.read())
         }
-        pendingActivating.setIdle()
-      }
-
-      when(dummyPendingActivating.valid && dummyPendingActivating.payload === oldestIndex) {
-        dummyPendingActivating.setIdle()
       }
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>

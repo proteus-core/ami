@@ -465,6 +465,8 @@ trait MimicryService {
   def acOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
 
   def isSensitiveBranch(stage: Stage): Bool
+
+  def isActivating(stage: Stage): Bool
 }
 
 trait FormalService {

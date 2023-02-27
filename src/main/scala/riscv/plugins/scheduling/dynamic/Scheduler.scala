@@ -86,8 +86,7 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
 
         for ((rs, index) <- reservationStations.zipWithIndex) {
           context = context.elsewhen(
-            (fuMask(index) || illegalInstruction) && rs.isAvailable && rob.isAvailable && !rob
-              .waitingForActivating()
+            (fuMask(index) || illegalInstruction) && rs.isAvailable && rob.isAvailable
           ) {
             rs.execute()
           }

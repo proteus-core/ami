@@ -155,7 +155,9 @@ class ReservationStation(
         }
       }
 
-      when(currentPendingActivating.valid && cdbMessage.robIndex === currentPendingActivating.payload) {
+      when(
+        currentPendingActivating.valid && cdbMessage.robIndex === currentPendingActivating.payload
+      ) {
         meta.pendingActivating.priorInstruction.valid := False
         // TODO: check for previousWaw here? assign only for dependent activating branches? even then... forwarded ac somehow? could just do an or, but what if exit inbetween? rob also can't know
         // maybe: get id of oldest activating that could apply, then check the chain for the youngest, and do oldest < youngest?
@@ -177,7 +179,7 @@ class ReservationStation(
         }
       }
 
-      when(!r1w && !r2w && !paw) {  // we don't have to wait for all waws to resolve here
+      when(!r1w && !r2w && !paw) { // we don't have to wait for all waws to resolve here
         // This is the only place where state is written directly (instead of
         // via stateNext). This ensures that we have priority over whatever
         // execute() writes to it which means that the order of calling
@@ -252,13 +254,16 @@ class ReservationStation(
         cdbStream.valid := True
       }
 
-      pipeline.serviceOption[MimicryService].foreach {mimicry => {
-        when(mimicry.isABranch(exeStage) || mimicry.isAJump(exeStage)) {
-          cdbStream.valid := True
-          cdbStream.payload.activatingTaken := pipeline.service[JumpService].jumpRequested(exeStage)
+      pipeline.serviceOption[MimicryService].foreach { mimicry =>
+        {
+          when(mimicry.isABranch(exeStage) || mimicry.isAJump(exeStage)) {
+            cdbStream.valid := True
+            cdbStream.payload.activatingTaken := pipeline
+              .service[JumpService]
+              .jumpRequested(exeStage)
+          }
         }
-      }}
-
+      }
 
       dispatchStream.valid := True
 
@@ -306,7 +311,9 @@ class ReservationStation(
     // calculate next pc for activating jumps here
     pipeline.serviceOption[MimicryService] foreach { mimicry =>
       when(mimicry.isABranch(issueStage)) {
-        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)  // TODO: we still need this, right?
+        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(
+          pipeline.data.IMM
+        ) // TODO: we still need this, right?
       }
     }
 
@@ -351,7 +358,8 @@ class ReservationStation(
           .output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
       ) {
         // TODO: how about activating jumps?
-        meta.previousWaw.priorInstructionNext := rob.findPreviousWaw(issueStage.output(pipeline.data.RD))
+        meta.previousWaw.priorInstructionNext := rob
+          .findPreviousWaw(issueStage.output(pipeline.data.RD))
         meta.pendingActivating.priorInstructionNext := mimicDependency
 //        when(mimicryDep.valid) {
 //          meta.mdep_write.priorInstructionNext.push(mimicryDep.payload)
@@ -386,7 +394,7 @@ class ReservationStation(
             }
           } otherwise {
             metaRs.priorInstructionNext.push(rsValue.payload.robIndex)
-            rsWaiting := True  // TODO: will this change too late? reg/comb
+            rsWaiting := True // TODO: will this change too late? reg/comb
           }
         } otherwise {
           regs.setReg(regData, issueStage.output(regData))

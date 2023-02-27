@@ -176,7 +176,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
       when(!taken && stage.value(Data.CTBRANCH)) {
         stage.arbitration.jumpRequested := True // probably not needed
         pipeline.service[JumpService].jumpRequested(stage) := True
-//        pipeline.service[FetchService].flushCache(stage)
+        //        pipeline.service[FetchService].flushCache(stage)
       }
     }
 
@@ -450,6 +450,10 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
 
   override def isAJump(stage: Stage): Bool = {
     stage.output(Data.AJUMP)
+  }
+
+  override def isActivating(stage: Stage): Bool = {
+    isAJump(stage) || isABranch(stage)
   }
 
   override def acOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt = {
