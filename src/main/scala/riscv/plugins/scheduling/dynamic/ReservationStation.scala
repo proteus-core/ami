@@ -87,9 +87,9 @@ class ReservationStation(
 
   val activeFlush: Bool = Bool()
 
-  val wawBuffer: Flow[UInt] = Reg(Flow(UInt(config.xlen bits)))
+  private val wawBuffer: Flow[UInt] = Reg(Flow(UInt(config.xlen bits)))
 
-  val mimicked = RegInit(False)
+  private val mimicked = RegInit(False)
 
   def reset(): Unit = {
     isAvailable := !activeFlush

@@ -14,6 +14,7 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
   val hasValue = Bool()
   val shadowingActivating = Flow(UInt(indexBits))
   val previousWaw = Flow(UInt(indexBits))
+  val exitAddress = Flow(UInt(config.xlen bits))
 
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters, indexBits)
@@ -39,25 +40,25 @@ class ReorderBuffer(
   def capacity: Int = robCapacity
   def indexBits: BitCount = log2Up(capacity) bits
 
-  val robEntries = Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters, indexBits).getZero))
-  val oldestIndex = Counter(capacity)
-  val newestIndex = Counter(capacity)
+  private val robEntries = Vec.fill(capacity)(RegInit(RobEntry(retirementRegisters, indexBits).getZero))
+  private val oldestIndex = Counter(capacity)
+  private val newestIndex = Counter(capacity)
   private val isFullNext = Bool()
   private val isFull = RegNext(isFullNext).init(False)
   private val willRetire = False
-  val isAvailable = !isFull || willRetire
+  val isAvailable: Bool = !isFull || willRetire
 
-  val pushInCycle = Bool()
+  private val pushInCycle = Bool()
   pushInCycle := False
-  val pushedEntry = RobEntry(retirementRegisters, indexBits)
+  private val pushedEntry = RobEntry(retirementRegisters, indexBits)
   pushedEntry := RobEntry(retirementRegisters, indexBits).getZero
 
-  val activatingShadow = RegInit(Flow(UInt(indexBits)).setIdle())  // TODO: assign
-  val pendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
-  val dummyPendingActivating = RegInit(Flow(UInt(indexBits)).setIdle()) // To keep track of activating instructions that arrive during AC > 0
-  val internalMMAC = RegInit(UInt(config.xlen bits).getZero)
-  val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
-  val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
+  private val activatingShadow = RegInit(Flow(UInt(indexBits)).setIdle())  // TODO: assign
+  private val pendingActivating = RegInit(Flow(UInt(indexBits)).setIdle())
+  private val dummyPendingActivating = RegInit(Flow(UInt(indexBits)).setIdle()) // To keep track of activating instructions that arrive during AC > 0
+  private val internalMMAC = RegInit(UInt(config.xlen bits).getZero)
+  private val internalMMEN = RegInit(UInt(config.xlen bits).getZero)
+  private val internalMMEX = RegInit(UInt(config.xlen bits).getZero)
 
   def readOnlyCsr(csrId: Int): CsrIo = {
     val csrService = pipeline.service[CsrService]
@@ -72,9 +73,9 @@ class ReorderBuffer(
   private val CSR_MMENTRY = 0x7df // CSR identifier
   private val CSR_MMEXIT = 0x7ef // CSR identifier
 
-  val acCsr = readOnlyCsr(CSR_MMAC)
-  val enCsr = readOnlyCsr(CSR_MMENTRY)
-  val exCsr = readOnlyCsr(CSR_MMEXIT)
+  private val acCsr = readOnlyCsr(CSR_MMAC)
+  private val enCsr = readOnlyCsr(CSR_MMENTRY)
+  private val exCsr = readOnlyCsr(CSR_MMEXIT)
 
   def reset(): Unit = {
     oldestIndex.clear()
@@ -106,7 +107,7 @@ class ReorderBuffer(
     pendingActivating.valid || dummyPendingActivating.valid
   }
 
-  def isValidAbsoluteIndex(index: UInt): Bool = {
+  private def isValidAbsoluteIndex(index: UInt): Bool = {
     val ret = Bool()
 
     val oldest = UInt(indexBits)
@@ -126,7 +127,7 @@ class ReorderBuffer(
     ret
   }
 
-  def relativeIndexForAbsolute(absolute: UInt): UInt = {
+  private def relativeIndexForAbsolute(absolute: UInt): UInt = {
     val adjustedIndex = UInt(32 bits)
     when(absolute >= oldestIndex.value) {
       adjustedIndex := (absolute.resized - oldestIndex.value).resized
@@ -137,7 +138,7 @@ class ReorderBuffer(
     adjustedIndex
   }
 
-  def absoluteIndexForRelative(relative: UInt): UInt = {
+  private def absoluteIndexForRelative(relative: UInt): UInt = {
     val absolute = UInt(32 bits)
     val adjusted = UInt(32 bits)
     val oldestResized = UInt(32 bits)
