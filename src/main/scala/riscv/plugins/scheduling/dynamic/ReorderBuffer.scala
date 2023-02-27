@@ -12,7 +12,8 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
     retirementRegisters.createBundle
   val ready = Bool()
   val hasValue = Bool()
-  val mimicDependency = Flow(UInt(indexBits))
+  val shadowingActivating = Flow(UInt(indexBits))
+  val previousWaw = Flow(UInt(indexBits))
 
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters, indexBits)
@@ -229,7 +230,7 @@ class ReorderBuffer(
       internalMMAC := newinternalMMAC
       internalMMEN := newinternalMMEN
       internalMMEX := newinternalMMEX
-      pushedEntry.mimicDependency := mimicDependency
+      pushedEntry.shadowingActivating := mimicDependency
     }
 
     (newestIndex.value, mimicDependency, (newinternalMMAC, newinternalMMEN, newinternalMMEX))
@@ -241,19 +242,15 @@ class ReorderBuffer(
       .element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
   }
 
-  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage], Flow[CdbMessage]) = {
+  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage]) = {
     val found = Bool()
     found := False
 
-    val target = Flow(CdbMessage(metaRegisters, indexBits))
+    val target = Flow(CdbMessage(metaRegisters, indexBits))  // TODO: refactor this to not use cdb?
     target.valid := False
     target.payload.robIndex := 0
     target.payload.writeValue := 0
-
-    val mimicTarget = Flow(CdbMessage(metaRegisters, indexBits))
-    mimicTarget.valid := False
-    mimicTarget.payload.robIndex := 0
-    mimicTarget.payload.writeValue := 0
+    target.previousWaw.setIdle()
 
     // loop through valid values and return the freshest if present
     for (relative <- 0 until capacity) {
@@ -270,26 +267,25 @@ class ReorderBuffer(
           && regId =/= U(0)
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
-        when(robEntries(absolute).mimicDependency.valid) {
-          mimicTarget.valid := !entry.hasValue // We want to track if it is hasn't finished executing yet
-          mimicTarget.robIndex := absolute
-          mimicTarget.writeValue := entry.registerMap.elementAs[UInt](
-            pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
-          )
-        } otherwise {
           found := True
           target.valid := entry.hasValue
           target.robIndex := absolute
+        target.previousWaw := entry.previousWaw
           target.writeValue := entry.registerMap.elementAs[UInt](
             pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
           )
-        }
+        // TODO: need to check for WAW dependency and forward that
+        // we probably also need to keep track of (and update) these in the ROB on each cdb update
       }
     }
-    (found, target, mimicTarget)
+    (found, target)
   }
 
-  def hasMimicryDependency(regId: UInt, dependency: Flow[UInt]): Flow[UInt] = {
+  // TODO: wrapper function for these lookups? for (all) { condition(target, iter) ... }
+
+  def findPreviousWaw(regId: UInt): Flow[UInt] = {
+//    find previous with same target (largely mimicrydependency fn), use the saved waw field to propagate
+
     // TODO: don't give it for persistent
     val result = Flow(UInt(indexBits))
     result.setIdle()
@@ -303,7 +299,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val differentMimicryContext = (entry.mimicDependency.valid =/= dependency.valid) || (entry.mimicDependency.valid && dependency.valid && entry.mimicDependency.payload =/= dependency.payload)
+//      val differentMimicryContext = (entry.shadowingActivating.valid =/= dependency.valid) || (entry.shadowingActivating.valid && dependency.valid && entry.shadowingActivating.payload =/= dependency.payload)
       val isInProgress = !entry.ready
 
       val registerType =
@@ -312,7 +308,7 @@ class ReorderBuffer(
       when(
         isValidAbsoluteIndex(absolute)
           && sameTarget
-          && differentMimicryContext
+//          && differentMimicryContext
           && isInProgress
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
@@ -400,7 +396,6 @@ class ReorderBuffer(
           }
         }
         pendingActivating.setIdle()
-//        }
       }
 
       when(dummyPendingActivating.valid && dummyPendingActivating.payload === oldestIndex) {

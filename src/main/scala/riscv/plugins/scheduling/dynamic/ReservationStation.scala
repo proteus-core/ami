@@ -158,6 +158,7 @@ class ReservationStation(
       when(currentPendingActivating.valid && cdbMessage.robIndex === currentPendingActivating.payload) {
         meta.pendingActivating.priorInstruction.valid := False
         // TODO: check for previousWaw here? assign only for dependent activating branches? even then... forwarded ac somehow? could just do an or, but what if exit inbetween? rob also can't know
+        // maybe: get id of oldest activating that could apply, then check the chain for the youngest, and do oldest < youngest?
         when(cdbMessage.activatingTaken) {
           mimicked := !mimicked
         }
@@ -349,8 +350,9 @@ class ReservationStation(
         issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR || issueStage
           .output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
       ) {
-        val mimicryDep =
-          rob.hasMimicryDependency(issueStage.output(pipeline.data.RD), mimicDependency)
+        // TODO: how about activating jumps?
+        meta.previousWaw.priorInstructionNext := rob.findPreviousWaw(issueStage.output(pipeline.data.RD))
+        meta.pendingActivating.priorInstructionNext := mimicDependency
 //        when(mimicryDep.valid) {
 //          meta.mdep_write.priorInstructionNext.push(mimicryDep.payload)
 //          stateNext := State.WAITING_FOR_ARGS
@@ -360,6 +362,7 @@ class ReservationStation(
 
     def dependencySetup(
         metaRs: RegisterSource,
+        rsWaiting: Bool,
 //        mimicRs: RegisterSource,
         reg: PipelineData[UInt],
         regData: PipelineData[UInt],
@@ -369,7 +372,7 @@ class ReservationStation(
 
       when(rsUsed) {
         val rsReg = issueStage.output(reg)
-        val (rsInRob, rsValue, mimicTarget) = rob.findRegisterValue(rsReg)
+        val (rsInRob, rsValue) = rob.findRegisterValue(rsReg)
 
 //        when(mimicTarget.valid) {
 //          mimicRs.priorInstructionNext.push(mimicTarget.payload.robIndex)
@@ -378,14 +381,18 @@ class ReservationStation(
         when(rsInRob) {
           when(rsValue.valid) {
             regs.setReg(regData, rsValue.payload.writeValue)
+            when(rsValue.previousWaw.valid) {
+              metaRs.priorInstructionNext.push(rsValue.previousWaw.payload)
+            }
           } otherwise {
             metaRs.priorInstructionNext.push(rsValue.payload.robIndex)
+            rsWaiting := True  // TODO: will this change too late? reg/comb
           }
         } otherwise {
           regs.setReg(regData, issueStage.output(regData))
         }
 
-        when((rsInRob && !rsValue.valid) || mimicTarget.valid) {
+        when(rsInRob && !rsValue.valid) {
           stateNext := State.WAITING_FOR_ARGS
         }
       }
@@ -393,6 +400,7 @@ class ReservationStation(
 
     dependencySetup(
       meta.rs1,
+      meta.rs1Waiting,
 //      meta.mdep_rs1,
       pipeline.data.RS1,
       pipeline.data.RS1_DATA,
@@ -400,6 +408,7 @@ class ReservationStation(
     )
     dependencySetup(
       meta.rs2,
+      meta.rs2Waiting,
 //      meta.mdep_rs2,
       pipeline.data.RS2,
       pipeline.data.RS2_DATA,
