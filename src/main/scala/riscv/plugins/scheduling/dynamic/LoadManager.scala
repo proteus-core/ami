@@ -1,6 +1,7 @@
 package riscv.plugins.scheduling.dynamic
 
 import riscv._
+import riscv.plugins.mimicry.MimicryRegisterType
 import spinal.core._
 import spinal.lib.Stream
 
@@ -96,6 +97,10 @@ class LoadManager(
       outputCache := rdbStream.payload
 
       cdbStream.valid := True
+      cdbStream.payload.realUpdate := loadStage.output(
+        pipeline.data.RD_TYPE
+      ) =/= MimicryRegisterType.MIMIC_GPR
+      cdbStream.payload.activatingTaken := False
       cdbStream.payload.writeValue := loadStage.output(pipeline.data.RD_DATA)
       cdbStream.payload.robIndex := storedMessage.robIndex
       resultCdbMessage := cdbStream.payload

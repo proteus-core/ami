@@ -467,6 +467,20 @@ trait MimicryService {
   def isSensitiveBranch(stage: Stage): Bool
 
   def isActivating(stage: Stage): Bool
+
+  def determineOutcomes(
+      mmac: UInt,
+      mmen: UInt,
+      mmex: UInt,
+      pc: UInt,
+      nextPc: UInt,
+      ajump: Bool,
+      abranch: Bool,
+      branchTaken: Bool,
+      mimic: Bool,
+      ghost: Bool,
+      persistent: Bool
+  ): (UInt, UInt, UInt, Bool)
 }
 
 trait FormalService {

@@ -476,5 +476,81 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     stage.output(Data.CTBRANCH) || stage.output(Data.ABRANCH)
   }
 
+  override def determineOutcomes(
+      mmac: UInt,
+      mmen: UInt,
+      mmex: UInt,
+      pc: UInt,
+      nextPc: UInt,
+      ajump: Bool,
+      abranch: Bool,
+      branchTaken: Bool,
+      mimic: Bool,
+      ghost: Bool,
+      persistent: Bool
+  ): (UInt, UInt, UInt, Bool) = {
+    val reactivation = False
+    val mimicked = Bool()
+    mimicked := False
+
+    val outac = UInt(config.xlen bits)
+    outac := mmac
+    val outen = UInt(config.xlen bits)
+    outen := mmen
+    val outex = UInt(config.xlen bits)
+    outex := mmex
+
+    val isExit = (mmac === 1) && (pc === mmex)
+
+    // 1) Is mimicry mode disabled?
+    when((mmac === 0) || isExit) {
+      // 1.1) Are we dealing with an activating jump? 1.2) Are we dealing with an activating branch?
+      when(ajump || (abranch && branchTaken)) {
+        reactivation := True
+
+        outen := pc
+        outex := nextPc
+
+        outac := 1
+      }
+    }
+
+    // 2) Is the current program counter registered as the entry address?
+    when(pc === mmen) {
+      // TODO: assert AC > 0
+      outac := mmac + 1
+    }
+
+    // 3) Is the current program counter registered as the exit address?
+    when(!reactivation) {
+      when(pc === mmex) {
+        when(mmac === 1) {
+          // We are exiting mimicry mode
+          outen := CSR_MMADDR_NONE
+          outex := CSR_MMADDR_NONE
+        }
+
+        // TODO: assert AC > 0
+        outac := mmac - 1
+      }
+    }
+
+    // 4) Do we need to mimic the execution?
+    when(mimic) {
+      mimicked := True
+    }
+
+    when(ghost) {
+      when((mmac === 0) || isExit) {
+        mimicked := True
+      }
+    } elsewhen (!persistent) {
+      when((mmac > 0) && (!isExit)) {
+        mimicked := True
+      }
+    }
+    (outac, outen, outex, mimicked)
+  }
+
   // TODO: setMimicked(stage)?
 }

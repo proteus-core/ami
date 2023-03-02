@@ -7,12 +7,18 @@ import spinal.lib._
 case class CdbMessage(metaRegisters: DynBundle[PipelineData[Data]], robIndexBits: BitCount)(implicit
     config: Config
 ) extends Bundle {
+  val metadata: Bundle with DynBundleAccess[PipelineData[Data]] = metaRegisters.createBundle
+
   val robIndex: UInt = UInt(robIndexBits)
   val writeValue: UInt = UInt(config.xlen bits)
-  val realUpdate: Bool = Bool() // TODO: move to metadata
-  val previousWaw: Flow[UInt] = Flow(UInt(robIndexBits)) // TODO: move this as well
-  val activatingTaken: Bool = Bool() // TODO: and this
-  val metadata: Bundle with DynBundleAccess[PipelineData[Data]] = metaRegisters.createBundle
+
+  // TODO: move these to metadata (or remove)
+  val realUpdate: Bool = Bool()
+  val previousWaw: Flow[UInt] = Flow(UInt(robIndexBits))
+  val activatingTaken: Bool = Bool()
+  val mmac: UInt = UInt(config.xlen bits)
+  val mmen: UInt = UInt(config.xlen bits)
+  val mmex: UInt = UInt(config.xlen bits)
 
   override def clone(): CdbMessage = {
     CdbMessage(metaRegisters, robIndexBits)
