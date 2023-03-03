@@ -24,17 +24,22 @@ case class RegisterSource(indexBits: BitCount) extends Bundle {
   }
 }
 
-case class InstructionDependencies(indexBits: BitCount) extends Bundle {
+case class InstructionDependencies(indexBits: BitCount)(implicit config: Config) extends Bundle {
   val rs1: RegisterSource = RegisterSource(indexBits)
   val rs2: RegisterSource = RegisterSource(indexBits)
   val pendingActivating: RegisterSource = RegisterSource(indexBits)
   val previousWaw: RegisterSource = RegisterSource(indexBits)
+
+  val wawBufferNext = Flow(UInt(config.xlen bits))
+  val wawBuffer = RegNext(wawBufferNext).init(wawBufferNext.getZero)
 
   def build(): Unit = {
     rs1.build()
     rs2.build()
     pendingActivating.build()
     previousWaw.build()
+
+    wawBufferNext := wawBuffer
   }
 
   def reset(): Unit = {
@@ -42,6 +47,8 @@ case class InstructionDependencies(indexBits: BitCount) extends Bundle {
     rs2.reset()
     pendingActivating.reset()
     previousWaw.reset()
+
+    wawBufferNext.setIdle()
   }
 }
 
@@ -88,13 +95,10 @@ class ReservationStation(
 
   val activeFlush: Bool = Bool()
 
-  private val wawBuffer: Flow[UInt] = Reg(Flow(UInt(config.xlen bits)))
-
   def reset(): Unit = {
     isAvailable := !activeFlush
     stateNext := State.IDLE
     meta.reset()
-    wawBuffer.setIdle()
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
@@ -125,6 +129,17 @@ class ReservationStation(
       currentWaw := meta.previousWaw.priorInstructionNext
     }
 
+    when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
+      when(cdbMessage.realUpdate && !meta.wawBuffer.valid) {
+        meta.wawBuffer.push(cdbMessage.writeValue)
+      }
+      when(cdbMessage.previousWaw.valid) {
+        meta.previousWaw.priorInstruction.push(cdbMessage.previousWaw.payload)
+      } otherwise {
+        meta.previousWaw.priorInstruction.valid := False
+      }
+    }
+
     when(state === State.WAITING_FOR_ARGS || stateNext === State.WAITING_FOR_ARGS) {
       val r1w = Bool()
       r1w := currentRs1Prior.valid
@@ -132,8 +147,6 @@ class ReservationStation(
       r2w := currentRs2Prior.valid
       val paw = Bool()
       paw := currentPendingActivating.valid
-      val waw = Bool()
-      waw := currentWaw.valid
 
       when(currentRs1Prior.valid && cdbMessage.robIndex === currentRs1Prior.payload) {
         when(currentRs1Waiting && cdbMessage.realUpdate) {
@@ -175,19 +188,6 @@ class ReservationStation(
           .inputMeta(regs, cdbMessage.mmac, cdbMessage.mmen, cdbMessage.mmex)
       }
 
-      // TODO: put this outside of waiting for args, but also make sure that if wawbuffer is updated in the same cycle as broadcast, it still works
-      when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
-        when(cdbMessage.realUpdate && !wawBuffer.valid) {
-          wawBuffer.push(cdbMessage.writeValue)
-        }
-        when(cdbMessage.previousWaw.valid) {
-          meta.previousWaw.priorInstruction.push(cdbMessage.previousWaw.payload)
-        } otherwise {
-          meta.previousWaw.priorInstruction.valid := False
-          waw := False
-        }
-      }
-
       when(!r1w && !r2w && !paw) { // we don't have to wait for all waws to resolve here
         // This is the only place where state is written directly (instead of
         // via stateNext). This ensures that we have priority over whatever
@@ -212,6 +212,7 @@ class ReservationStation(
     dispatchStream.payload := resultDispatchMessage
 
     cdbStream.valid := False
+    resultCdbMessage.previousWaw := meta.previousWaw.priorInstruction
     cdbStream.payload := resultCdbMessage
 
     regs.shift := False
@@ -263,8 +264,8 @@ class ReservationStation(
           cdbStream.payload.mmex := ex
 
           when(mim) {
-            cdbStream.payload.writeValue := wawBuffer.payload
-            cdbStream.payload.realUpdate := wawBuffer.valid
+            cdbStream.payload.writeValue := meta.wawBufferNext.payload
+            cdbStream.payload.realUpdate := meta.wawBufferNext.valid
           } otherwise {
             cdbStream.payload.writeValue := exeStage.output(pipeline.data.RD_DATA)
             cdbStream.payload.realUpdate := exeStage.output(pipeline.data.RD_DATA_VALID)
@@ -274,7 +275,6 @@ class ReservationStation(
 
       // Based on AC (either directly obtained or through a CDB update), set output register to MIMIC_GPR before it is propagated on CDB or RDB (build?)
 
-      cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
       cdbStream.payload.activatingTaken := False
 
       cdbStream.payload.robIndex := robEntryIndex
@@ -324,6 +324,12 @@ class ReservationStation(
     // if the result is on the buses and it has been acknowledged, make the RS
     // available again
     when(state === State.BROADCASTING_RESULT && !activeFlush) {
+      // keep WAW up to date
+      when(!resultCdbMessage.realUpdate && cdbWaiting && meta.wawBufferNext.valid) {
+        resultCdbMessage.realUpdate := meta.wawBufferNext.valid
+        resultCdbMessage.writeValue := meta.wawBufferNext.payload
+      }
+
       cdbStream.valid := cdbWaiting
       dispatchStream.valid := dispatchWaiting
 
