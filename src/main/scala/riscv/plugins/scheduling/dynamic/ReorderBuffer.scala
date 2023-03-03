@@ -148,10 +148,21 @@ class ReorderBuffer(
     adjusted
   }
 
+  private def previousIndex(): Flow[UInt] = {
+    val result = Flow(UInt(indexBits))
+    result.setIdle()
+    val relativeNewest = relativeIndexForAbsolute(newestIndex)
+    when(relativeNewest > 0) {
+      result.push(absoluteIndexForRelative(relativeNewest - 1).resized)
+    }
+    result
+  }
+
   def currentMMAC(): UInt = {
     val mmac = UInt(config.xlen bits)
-    when(isValidAbsoluteIndex(newestIndex)) {
-      mmac := robEntries(newestIndex).mmac
+    val previous = previousIndex()
+    when(previous.valid) {
+      mmac := robEntries(previous.payload).mmac
     } otherwise {
       mmac := acCsr.read()
     }
@@ -160,8 +171,9 @@ class ReorderBuffer(
 
   def currentMMEN(): UInt = {
     val mmen = UInt(config.xlen bits)
-    when(isValidAbsoluteIndex(newestIndex)) {
-      mmen := robEntries(newestIndex).mmen
+    val previous = previousIndex()
+    when(previous.valid) {
+      mmen := robEntries(previous.payload).mmen
     } otherwise {
       mmen := acCsr.read()
     }
@@ -171,19 +183,24 @@ class ReorderBuffer(
   def currentMMEX(): UInt = {
     val mmex = UInt(config.xlen bits)
     mmex := acCsr.read()
+    val p = previousIndex()
 
-    when(isValidAbsoluteIndex(newestIndex)) {
-      val previous = robEntries(newestIndex)
+    when(p.valid) {
+      val previous = robEntries(p.payload)
       when(previous.pendingExitAddress.valid) {
         mmex := previous.pendingExitAddress.payload
       } otherwise {
         when(previous.shadowActivating.valid) {
-          robEntries(previous.shadowActivating.payload).pendingExitAddress
+          mmex := robEntries(previous.shadowActivating.payload).pendingExitAddress.payload
         }
       }
     }
     mmex
   }
+
+  val cMMAC: UInt = currentMMAC()
+  val cMMEN: UInt = currentMMEN()
+  val cMMEX: UInt = currentMMEX()
 
   def pushEntry(
       rd: UInt,
@@ -208,10 +225,6 @@ class ReorderBuffer(
     val mimicDependency = Flow(UInt(indexBits))
     mimicDependency.setIdle()
 
-    val cMMAC: UInt = currentMMAC()
-    val cMMEN: UInt = currentMMEN()
-    val cMMEX: UInt = currentMMEX()
-
     pushedEntry.mmac := cMMAC
     pushedEntry.mmen := cMMEN
     pushedEntry.mmex := cMMEX
@@ -226,25 +239,32 @@ class ReorderBuffer(
 
         val previousShadow = Flow(UInt(indexBits))
         previousShadow.setIdle()
+        val previous = previousIndex()
 
-        when(isValidAbsoluteIndex(newestIndex)) {
-          // Copy the previous shadowActivating
-          previousShadow := robEntries(newestIndex).shadowActivating
+        when(previous.valid) {
+          // If the previous instruction was activating (and the current is not the exit), set that as activating
+          when(robEntries(previous.payload).pendingExitAddress.valid) {
+            previousShadow.push(previous.payload)
+          } otherwise {
+            // Copy the previous shadowActivating
+            previousShadow := robEntries(previous.payload).shadowActivating
+          }
         }
 
         when(pc === cMMEX) {
           when(previousShadow.valid) {
-            pushedEntry.shadowActivating := findPreviousActiveActivating(previousShadow.payload)
+            mimicDependency := findPreviousActiveActivating(previousShadow.payload)
           }
         } otherwise {
           // Copy the previous shadowActivating
-          pushedEntry.shadowActivating := previousShadow
+          mimicDependency := previousShadow
         }
 
         when(mimicry.isActivating(issueStage)) {
           // If the instruction is activating, set pendingExitAddress to its nextPc (and set shadowActivating to itself?)
           pushedEntry.pendingExitAddress.push(nextPc)
         }
+        pushedEntry.shadowActivating := mimicDependency
       }
     }
 
@@ -286,7 +306,7 @@ class ReorderBuffer(
       when(
         isValidAbsoluteIndex(
           absolute
-        ) && entry.pendingExitAddress.valid && entry.pendingExitAddress.payload =/= previousShadow
+        ) && entry.pendingExitAddress.valid && absolute =/= previousShadow
       ) {
         result.push(absolute)
       }

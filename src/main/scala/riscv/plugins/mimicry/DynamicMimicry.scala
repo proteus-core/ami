@@ -343,6 +343,10 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     stage.input(Data.MMEXIT) := mmex
   }
 
+  override def getMeta(stage: Stage): (UInt, UInt, UInt) = {
+    (stage.output(Data.MMAC), stage.output(Data.MMENTRY), stage.output(Data.MMEXIT))
+  }
+
   //  override def finish(): Unit = {
   //    pipeline plug new Area {
   //      val csrService = pipeline.service[CsrService]
@@ -516,21 +520,21 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     }
 
     // 2) Is the current program counter registered as the entry address?
-    when(pc === mmen) {
-      // TODO: assert AC > 0
+    when(pc === mmen && mmac > 0) {
+      // TODO: assert AC > 0 ^^
       outac := mmac + 1
     }
 
     // 3) Is the current program counter registered as the exit address?
     when(!reactivation) {
-      when(pc === mmex) {
+      when(pc === mmex && mmac > 0) {
         when(mmac === 1) {
           // We are exiting mimicry mode
           outen := CSR_MMADDR_NONE
           outex := CSR_MMADDR_NONE
         }
 
-        // TODO: assert AC > 0
+        // TODO: assert AC > 0 ^^
         outac := mmac - 1
       }
     }

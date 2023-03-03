@@ -90,8 +90,6 @@ class ReservationStation(
 
   private val wawBuffer: Flow[UInt] = Reg(Flow(UInt(config.xlen bits)))
 
-  private val mimicked = RegInit(False)
-
   def reset(): Unit = {
     isAvailable := !activeFlush
     stateNext := State.IDLE
@@ -171,16 +169,13 @@ class ReservationStation(
         currentPendingActivating.valid && cdbMessage.robIndex === currentPendingActivating.payload
       ) {
         meta.pendingActivating.priorInstruction.valid := False
-        when(cdbMessage.activatingTaken) {
-          mimicked := !mimicked
-        }
         paw := False
-        // TODO: here?
-        resultCdbMessage.mmac := cdbMessage.mmac
-        resultCdbMessage.mmen := cdbMessage.mmen
-        resultCdbMessage.mmex := cdbMessage.mmex
+        pipeline
+          .service[MimicryService]
+          .inputMeta(regs, cdbMessage.mmac, cdbMessage.mmen, cdbMessage.mmex)
       }
 
+      // TODO: put this outside of waiting for args, but also make sure that if wawbuffer is updated in the same cycle as broadcast, it still works
       when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
         when(cdbMessage.realUpdate && !wawBuffer.valid) {
           wawBuffer.push(cdbMessage.writeValue)
@@ -240,15 +235,17 @@ class ReservationStation(
 
     // when waiting for the result, and it is ready, put in on the bus
     when(state === State.EXECUTING && exeStage.arbitration.isDone && !activeFlush) {
+      val mim = Bool()
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
-          val (ac, en, ex, mim) = pipeline
+          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
+          val (ac, en, ex, mim2) = pipeline
             .service[MimicryService]
             .determineOutcomes(
-              resultCdbMessage.mmac,
-              resultCdbMessage.mmen,
-              resultCdbMessage.mmex,
+              mmac,
+              mmen,
+              mmex,
               exeStage.output(pipeline.data.PC),
               exeStage.output(pipeline.data.NEXT_PC),
               mimicry.isAJump(exeStage),
@@ -259,6 +256,8 @@ class ReservationStation(
               mimicry.isPersistent(exeStage)
             )
 
+          mim := mim2
+
           cdbStream.payload.mmac := ac
           cdbStream.payload.mmen := en
           cdbStream.payload.mmex := ex
@@ -266,18 +265,17 @@ class ReservationStation(
           when(mim) {
             cdbStream.payload.writeValue := wawBuffer.payload
             cdbStream.payload.realUpdate := wawBuffer.valid
-
           } otherwise {
             cdbStream.payload.writeValue := exeStage.output(pipeline.data.RD_DATA)
             cdbStream.payload.realUpdate := exeStage.output(pipeline.data.RD_DATA_VALID)
           }
-
         }
       }
 
       // Based on AC (either directly obtained or through a CDB update), set output register to MIMIC_GPR before it is propagated on CDB or RDB (build?)
 
       cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
+      cdbStream.payload.activatingTaken := False
 
       cdbStream.payload.robIndex := robEntryIndex
       dispatchStream.payload.robIndex := robEntryIndex
@@ -292,11 +290,16 @@ class ReservationStation(
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
-          when(mimicry.isABranch(exeStage) || mimicry.isAJump(exeStage)) {
+          when(mimicry.isActivating(exeStage)) {
             cdbStream.valid := True
             cdbStream.payload.activatingTaken := pipeline
               .service[JumpService]
               .jumpRequested(exeStage)
+          }
+          when(mim) {
+            dispatchStream.payload.registerMap.element(
+              pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
+            ) := MimicryRegisterType.MIMIC_GPR
           }
         }
       }
@@ -360,8 +363,6 @@ class ReservationStation(
       }
     }
 
-    mimicked := pipeline.service[MimicryService].isGhost(issueStage) // TODO: here?
-
     val (robIndex, mimicDependency, (mmac, mmen, mmex)) = rob.pushEntry(
       issueStage.output(pipeline.data.RD),
       issueStage.output(pipeline.data.RD_TYPE),
@@ -371,9 +372,9 @@ class ReservationStation(
     )
 
     // TODO: here?
-    resultCdbMessage.mmac := mmac
-    resultCdbMessage.mmen := mmen
-    resultCdbMessage.mmex := mmex
+    when(!mimicDependency.valid) {
+      pipeline.service[MimicryService].inputMeta(regs, mmac, mmen, mmex)
+    }
 
     robEntryIndex := robIndex
 

@@ -481,6 +481,8 @@ trait MimicryService {
       ghost: Bool,
       persistent: Bool
   ): (UInt, UInt, UInt, Bool)
+
+  def getMeta(stage: Stage): (UInt, UInt, UInt)
 }
 
 trait FormalService {
