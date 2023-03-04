@@ -253,7 +253,7 @@ class ReorderBuffer(
           }
         }
 
-        for (relative <- (0 until capacity).reverse) {
+        for (relative <- 0 until capacity) {
           val absolute = absoluteIndexForRelative(relative).resized
 
           val entry = robEntries(absolute)
@@ -410,7 +410,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val isInProgress = !entry.ready
+      val isInProgress = !entry.hasValue
 
       val registerType =
         entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
@@ -444,7 +444,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val isInProgress = !entry.ready
+      val isInProgress = !entry.hasValue
       val isOlder = relativeIndexForAbsolute(absolute) < relativeIndexForAbsolute(robIndex)
 
       val registerType =
