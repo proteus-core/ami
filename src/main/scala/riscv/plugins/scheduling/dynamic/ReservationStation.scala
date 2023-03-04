@@ -276,6 +276,7 @@ class ReservationStation(
       // Based on AC (either directly obtained or through a CDB update), set output register to MIMIC_GPR before it is propagated on CDB or RDB (build?)
 
       cdbStream.payload.activatingTaken := False
+      cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
 
       cdbStream.payload.robIndex := robEntryIndex
       dispatchStream.payload.robIndex := robEntryIndex

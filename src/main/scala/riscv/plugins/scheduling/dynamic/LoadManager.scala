@@ -71,6 +71,12 @@ class LoadManager(
       stateNext := State.IDLE
     }
 
+    val regType =
+      storedMessage.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
+    when(regType === RegisterType.GPR || regType === MimicryRegisterType.MIMIC_GPR) {
+      resultCdbMessage.previousWaw := rob.findPreviousWawForEntry(storedMessage.robIndex)
+    }
+
     cdbStream.valid := False
     cdbStream.payload := resultCdbMessage
 

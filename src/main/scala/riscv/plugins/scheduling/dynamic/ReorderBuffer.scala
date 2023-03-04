@@ -17,9 +17,9 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
     retirementRegisters.createBundle
   val ready = Bool()
   val hasValue = Bool()
-  val shadowActivating = Flow(UInt(indexBits))
+  val mimicDependency = Flow(UInt(indexBits))
   val previousWaw = Flow(UInt(indexBits))
-  val pendingExitAddress = Flow(UInt(config.xlen bits))
+  val pendingExit = Flow(UInt(config.xlen bits))
 
   // temporary
   val mmac = UInt(config.xlen bits)
@@ -148,59 +148,15 @@ class ReorderBuffer(
     adjusted
   }
 
-  private def previousIndex(): Flow[UInt] = {
+  private def previousIndex(idx: UInt): Flow[UInt] = {
     val result = Flow(UInt(indexBits))
     result.setIdle()
-    val relativeNewest = relativeIndexForAbsolute(newestIndex)
-    when(relativeNewest > 0) {
-      result.push(absoluteIndexForRelative(relativeNewest - 1).resized)
+    val relative = relativeIndexForAbsolute(idx)
+    when(relative > 0) {
+      result.push(absoluteIndexForRelative(relative - 1).resized)
     }
     result
   }
-
-  def currentMMAC(): UInt = {
-    val mmac = UInt(config.xlen bits)
-    val previous = previousIndex()
-    when(previous.valid) {
-      mmac := robEntries(previous.payload).mmac
-    } otherwise {
-      mmac := acCsr.read()
-    }
-    mmac
-  }
-
-  def currentMMEN(): UInt = {
-    val mmen = UInt(config.xlen bits)
-    val previous = previousIndex()
-    when(previous.valid) {
-      mmen := robEntries(previous.payload).mmen
-    } otherwise {
-      mmen := acCsr.read()
-    }
-    mmen
-  }
-
-  def currentMMEX(): UInt = {
-    val mmex = UInt(config.xlen bits)
-    mmex := acCsr.read()
-    val p = previousIndex()
-
-    when(p.valid) {
-      val previous = robEntries(p.payload)
-      when(previous.pendingExitAddress.valid) {
-        mmex := previous.pendingExitAddress.payload
-      } otherwise {
-        when(previous.shadowActivating.valid) {
-          mmex := robEntries(previous.shadowActivating.payload).pendingExitAddress.payload
-        }
-      }
-    }
-    mmex
-  }
-
-  val cMMAC: UInt = currentMMAC()
-  val cMMEN: UInt = currentMMEN()
-  val cMMEX: UInt = currentMMEX()
 
   def pushEntry(
       rd: UInt,
@@ -222,53 +178,118 @@ class ReorderBuffer(
 
     val issueStage = pipeline.issuePipeline.stages.last
 
-    val mimicDependency = Flow(UInt(indexBits))
-    mimicDependency.setIdle()
+    val pendingActivating = Flow(UInt(indexBits))
+    pendingActivating.setIdle()
 
-    pushedEntry.mmac := cMMAC
-    pushedEntry.mmen := cMMEN
-    pushedEntry.mmex := cMMEX
+    val metaUpdateNeeded = Bool()
+    metaUpdateNeeded := False
 
-    // When instructions are inserted into the ROB (pushEntry):
+    def updateMeta(mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
+      pushedEntry.mmac := mmac
+      pushedEntry.mmen := mmen
+      pushedEntry.mmex := mmex
+    }
+
+    def localUpdate(mmac: UInt, mmen: UInt, mmex: UInt): (UInt, UInt, UInt) = {
+      val outac = UInt(config.xlen bits)
+      outac := mmac
+      val outen = UInt(config.xlen bits)
+      outen := mmen
+      val outex = UInt(config.xlen bits)
+      outex := mmex
+
+      when(pc === mmen && mmac > 0) {
+        outac := mmac + 1
+      }
+      when(pc === mmex && mmac > 0) {
+        when(mmac === 1) {
+          outen := 0
+          outex := 0
+        }
+        outac := mmac - 1
+      }
+      (outac, outen, outex)
+    }
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       {
+        val outac = UInt(config.xlen bits)
+        outac := 0
+        val outen = UInt(config.xlen bits)
+        outen := 0
+        val outex = UInt(config.xlen bits)
+        outex := 0
 
-        // If the instruction matches the exit address of the shadowActivating of the last valid instruction (or if it doesn't exist, csrEX),
-        //   look for the previous activating branch and set that as shadowActivating
+        val found = Bool()
+        found := False
 
-        val previousShadow = Flow(UInt(indexBits))
-        previousShadow.setIdle()
-        val previous = previousIndex()
-
-        when(previous.valid) {
-          // If the previous instruction was activating (and the current is not the exit), set that as activating
-          when(robEntries(previous.payload).pendingExitAddress.valid) {
-            previousShadow.push(previous.payload)
+        def handleExit(absolute: UInt): Unit = {
+          val entry = robEntries(absolute)
+          pushedEntry.mimicDependency.push(absolute)
+          when(entry.hasValue) {
+            outac := entry.mmac
+            outen := entry.mmen
+            outex := entry.mmex
           } otherwise {
-            // Copy the previous shadowActivating
-            previousShadow := robEntries(previous.payload).shadowActivating
+            metaUpdateNeeded := True
           }
         }
 
-        when(pc === cMMEX) {
-          when(previousShadow.valid) {
-            mimicDependency := findPreviousActiveActivating(previousShadow.payload)
+        // find first prior instruction with pendingExit
+        val priorPending = findPreviousActiveActivating()
+        when(priorPending.valid) {
+          when(robEntries(priorPending.payload).pendingExit.payload === pc) {
+            robEntries(priorPending.payload).pendingExit.setIdle()
+            val secondPending = findPreviousActiveActivating(priorPending.payload)
+            // if pc == pendingExit, remove this pendingExit, look for the next one, then (if valid, copy MM, if not valid, depend on it)
+            when(secondPending.valid) {
+              handleExit(secondPending.payload)
+              found := True
+            }
+          } otherwise {
+            // if pc != pendingExit, (if valid, copy MM, if not valid, depend on it)
+            handleExit(priorPending.payload)
+            found := True
           }
-        } otherwise {
-          // Copy the previous shadowActivating
-          mimicDependency := previousShadow
         }
 
+        for (relative <- (0 until capacity).reverse) {
+          val absolute = absoluteIndexForRelative(relative).resized
+
+          val entry = robEntries(absolute)
+          // if none found, copy MM from most recent instruction with no deps (or csr)
+          when(!entry.mimicDependency.valid && !pushedEntry.mimicDependency.valid) {
+            found := True
+            outac := entry.mmac
+            outen := entry.mmen
+            outex := entry.mmex
+          }
+        }
+
+        // if none found, csr also counts
+        when(!found) {
+          outac := acCsr.read()
+          outen := enCsr.read()
+          outex := exCsr.read()
+        }
+
+        // if activating, set pendingExit
         when(mimicry.isActivating(issueStage)) {
-          // If the instruction is activating, set pendingExitAddress to its nextPc (and set shadowActivating to itself?)
-          pushedEntry.pendingExitAddress.push(nextPc)
+          pushedEntry.pendingExit.push(nextPc)
         }
-        pushedEntry.shadowActivating := mimicDependency
+
+        // TODO: can this mess with activating instructions?
+        val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
+        updateMeta(mmac, mmen, mmex)
+
+        when(metaUpdateNeeded) {
+          pendingActivating := pushedEntry.mimicDependency
+        }
+
       }
     }
 
-    (newestIndex.value, mimicDependency, (cMMAC, cMMEN, cMMEX))
+    (newestIndex.value, pendingActivating, (pushedEntry.mmac, pushedEntry.mmen, pushedEntry.mmex))
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
@@ -306,7 +327,28 @@ class ReorderBuffer(
       when(
         isValidAbsoluteIndex(
           absolute
-        ) && entry.pendingExitAddress.valid && absolute =/= previousShadow
+        ) && entry.pendingExit.valid && absolute =/= previousShadow
+      ) {
+        result.push(absolute)
+      }
+    }
+    result
+  }
+
+  private def findPreviousActiveActivating(): Flow[UInt] = {
+    val result = Flow(UInt(indexBits))
+    result.setIdle()
+
+    for (relative <- 0 until capacity) {
+      val absolute = UInt(indexBits)
+      absolute := absoluteIndexForRelative(relative).resized
+
+      val entry = robEntries(absolute)
+
+      when(
+        isValidAbsoluteIndex(
+          absolute
+        ) && entry.pendingExit.valid
       ) {
         result.push(absolute)
       }
@@ -385,6 +427,42 @@ class ReorderBuffer(
     result
   }
 
+  def findPreviousWawForEntry(robIndex: UInt): Flow[UInt] = {
+    val result = Flow(UInt(indexBits))
+    result.setIdle()
+
+    val regId = robEntries(robIndex).registerMap.elementAs[UInt](
+      pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+    )
+
+    for (relative <- 0 until capacity) {
+      val absolute = UInt(indexBits)
+      absolute := absoluteIndexForRelative(relative).resized
+
+      val entry = robEntries(absolute)
+
+      val sameTarget = entry.registerMap.elementAs[UInt](
+        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+      ) === regId
+      val isInProgress = !entry.ready
+      val isOlder = relativeIndexForAbsolute(absolute) < relativeIndexForAbsolute(robIndex)
+
+      val registerType =
+        entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
+
+      when(
+        isValidAbsoluteIndex(absolute)
+          && sameTarget
+          && isInProgress
+          && isOlder
+          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
+      ) {
+        result.push(absolute)
+      }
+    }
+    result
+  }
+
   def hasPendingStoreForEntry(robIndex: UInt, address: UInt): Bool = {
     val found = Bool()
     found := False
@@ -451,15 +529,9 @@ class ReorderBuffer(
     when(!isEmpty && oldestEntry.ready) {
       ret.arbitration.isValid := True
 
-      when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
-        // mimicry mode activated
-      } otherwise {
-        pipeline.serviceOption[MimicryService].foreach { mimicry =>
-          mimicry.inputMeta(ret, 0, enCsr.read(), exCsr.read())
-        }
-      }
-
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
+        mimicry.inputMeta(ret, oldestEntry.mmac, oldestEntry.mmen, oldestEntry.mmex)
+
         when(mimicry.isCtBranchOfBundle(oldestEntry.registerMap)) {
           pipeline.service[FetchService].flushCache(ret)
         }
