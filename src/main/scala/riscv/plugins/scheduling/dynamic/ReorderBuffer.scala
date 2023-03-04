@@ -158,6 +158,12 @@ class ReorderBuffer(
     result
   }
 
+  val pendingActivating = Flow(UInt(indexBits))
+  pendingActivating.setIdle()
+
+  val metaUpdateNeeded = Bool()
+  metaUpdateNeeded := False
+
   def pushEntry(
       rd: UInt,
       rdType: SpinalEnumCraft[RegisterType.type],
@@ -178,11 +184,6 @@ class ReorderBuffer(
 
     val issueStage = pipeline.issuePipeline.stages.last
 
-    val pendingActivating = Flow(UInt(indexBits))
-    pendingActivating.setIdle()
-
-    val metaUpdateNeeded = Bool()
-    metaUpdateNeeded := False
 
     def updateMeta(mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
       pushedEntry.mmac := mmac

@@ -390,12 +390,13 @@ class ReservationStation(
 //
 //    meta.reset() // TODO: is this needed? reset at the end of the previous anyway?
 
-    when(!pipeline.service[MimicryService].isPersistent(issueStage)) { // TODO: could also be determined in the ROB, not sure which one is better
+    // TODO: possible optimization to enable this if, but need to be careful with MM** updates
+//    when(!pipeline.service[MimicryService].isPersistent(issueStage)) { // TODO: could also be determined in the ROB, not sure which one is better
       meta.pendingActivating.priorInstructionNext := mimicDependency
       when(mimicDependency.valid) {
         stateNext := State.WAITING_FOR_ARGS
       }
-    }
+//    }
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       when(

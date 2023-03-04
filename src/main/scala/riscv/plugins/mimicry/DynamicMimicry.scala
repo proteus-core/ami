@@ -184,21 +184,23 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     // not automatically routed (because the routing uses the information available *before*
     // finish()). Therefore, we have to manually inform the router that these outputs will be
     // needed.
-    pipeline.retirementStage.output(Data.MM_WRITE_BOUNDS)
-    pipeline.retirementStage.output(Data.MM_WRITE_AC)
-    pipeline.retirementStage.output(Data.MMAC)
-    pipeline.retirementStage.output(Data.MMENTRY)
-    pipeline.retirementStage.output(Data.MMEXIT)
-    pipeline.retirementStage.output(Data.CTBRANCH)
+    for (stage <- pipeline.stages) {
+      stage.output(Data.MM_WRITE_BOUNDS)
+      stage.output(Data.MM_WRITE_AC)
+      stage.output(Data.MMAC)
+      stage.output(Data.MMENTRY)
+      stage.output(Data.MMEXIT)
+      stage.output(Data.CTBRANCH)
+      stage.output(Data.AJUMP)
+      stage.output(Data.ABRANCH)
+      stage.output(Data.OUTCOME)
+      stage.output(Data.GHOST)
+      stage.output(Data.MIMIC)
+      stage.output(Data.PERSISTENT)
+    }
 
     if (config.debug) {
       // Needed for the tests
-      pipeline.retirementStage.output(Data.AJUMP)
-      pipeline.retirementStage.output(Data.ABRANCH)
-      pipeline.retirementStage.output(Data.OUTCOME)
-      pipeline.retirementStage.output(Data.GHOST)
-      pipeline.retirementStage.output(Data.MIMIC)
-      pipeline.retirementStage.output(Data.PERSISTENT)
     }
   }
 
