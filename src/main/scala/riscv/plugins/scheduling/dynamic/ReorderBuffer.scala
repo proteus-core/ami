@@ -258,7 +258,7 @@ class ReorderBuffer(
 
           val entry = robEntries(absolute)
           // if none found, copy MM from most recent instruction with no deps (or csr)
-          when(!entry.mimicDependency.valid && !pushedEntry.mimicDependency.valid) {
+          when(isValidAbsoluteIndex(absolute) && !entry.mimicDependency.valid && !pushedEntry.mimicDependency.valid) {
             found := True
             outac := entry.mmac
             outen := entry.mmen
