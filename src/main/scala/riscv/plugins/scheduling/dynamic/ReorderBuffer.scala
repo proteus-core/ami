@@ -184,7 +184,6 @@ class ReorderBuffer(
 
     val issueStage = pipeline.issuePipeline.stages.last
 
-
     def updateMeta(mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
       pushedEntry.mmac := mmac
       pushedEntry.mmen := mmen
@@ -259,7 +258,11 @@ class ReorderBuffer(
 
           val entry = robEntries(absolute)
           // if none found, copy MM from most recent instruction with no deps (or csr)
-          when(isValidAbsoluteIndex(absolute) && !entry.mimicDependency.valid && !pushedEntry.mimicDependency.valid) {
+          when(
+            isValidAbsoluteIndex(
+              absolute
+            ) && !entry.mimicDependency.valid && !pushedEntry.mimicDependency.valid
+          ) {
             found := True
             outac := entry.mmac
             outen := entry.mmen
@@ -357,9 +360,12 @@ class ReorderBuffer(
     result
   }
 
-  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage]) = {
+  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage], Flow[UInt]) = {
     val found = Bool()
     found := False
+
+    val previousValid = Flow(UInt(config.xlen bits))
+    previousValid.setIdle()
 
     val target = Flow(CdbMessage(metaRegisters, indexBits)) // TODO: refactor this to not use cdb?
     target.valid := False
@@ -383,6 +389,13 @@ class ReorderBuffer(
           && regId =/= U(0)
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
+        when(entry.hasValue && registerType === RegisterType.GPR) {
+          previousValid.push(
+            entry.registerMap.elementAs[UInt](
+              pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
+            )
+          )
+        }
         found := True
         target.valid := entry.hasValue
         target.robIndex := absolute
@@ -393,7 +406,7 @@ class ReorderBuffer(
         target.realUpdate := registerType === RegisterType.GPR
       }
     }
-    (found, target)
+    (found, target, previousValid)
   }
 
   // TODO: wrapper function for these lookups? for (all) { condition(target, iter) ... }

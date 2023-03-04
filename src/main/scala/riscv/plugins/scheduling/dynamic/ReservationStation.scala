@@ -11,7 +11,7 @@ case class RegisterSource(indexBits: BitCount) extends Bundle {
     RegNext(priorInstructionNext).init(priorInstructionNext.getZero)
 
   val waitingForRealNext: Bool = Bool()
-  val waitingForReal: Bool = RegNext(waitingForRealNext).init(False)
+  val waitingForReal: Bool = RegNext(waitingForRealNext).init(False) // TODO: is this needed?
 
   def build(): Unit = {
     priorInstructionNext := priorInstruction
@@ -95,6 +95,12 @@ class ReservationStation(
 
   val activeFlush: Bool = Bool()
 
+  val rs1CdbUpdate = Bool()
+  rs1CdbUpdate := False
+
+  val rs2CdbUpdate = Bool()
+  rs2CdbUpdate := False
+
   def reset(): Unit = {
     isAvailable := !activeFlush
     stateNext := State.IDLE
@@ -152,6 +158,7 @@ class ReservationStation(
         when(currentRs1Waiting && cdbMessage.realUpdate) {
           // if the cdb contains the true register value
           regs.setReg(pipeline.data.RS1_DATA, cdbMessage.writeValue)
+          rs1CdbUpdate := True
           meta.rs1.waitingForReal := False
         }
         when(cdbMessage.previousWaw.valid) {
@@ -167,6 +174,7 @@ class ReservationStation(
         when(currentRs2Waiting && cdbMessage.realUpdate) {
           // if the cdb contains the true register value
           regs.setReg(pipeline.data.RS2_DATA, cdbMessage.writeValue)
+          rs2CdbUpdate := True
           meta.rs2.waitingForReal := False
         }
         when(cdbMessage.previousWaw.valid) {
@@ -264,6 +272,7 @@ class ReservationStation(
           cdbStream.payload.mmex := ex
 
           when(mim) {
+            // TODO: how to propagate this for mimicked loads? -> loadManager should also keep a wawbuffer and listen to cdb updates
             cdbStream.payload.writeValue := meta.wawBufferNext.payload
             cdbStream.payload.realUpdate := meta.wawBufferNext.valid
           } otherwise {
@@ -392,10 +401,10 @@ class ReservationStation(
 
     // TODO: possible optimization to enable this if, but need to be careful with MM** updates
 //    when(!pipeline.service[MimicryService].isPersistent(issueStage)) { // TODO: could also be determined in the ROB, not sure which one is better
-      meta.pendingActivating.priorInstructionNext := mimicDependency
-      when(mimicDependency.valid) {
-        stateNext := State.WAITING_FOR_ARGS
-      }
+    meta.pendingActivating.priorInstructionNext := mimicDependency
+    when(mimicDependency.valid) {
+      stateNext := State.WAITING_FOR_ARGS
+    }
 //    }
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
@@ -413,6 +422,7 @@ class ReservationStation(
 
     def dependencySetup(
         metaRs: RegisterSource,
+        rsCdbUpdate: Bool,
         reg: PipelineData[UInt],
         regData: PipelineData[UInt],
         regType: PipelineData[SpinalEnumCraft[RegisterType.type]]
@@ -421,7 +431,7 @@ class ReservationStation(
 
       when(rsUsed) {
         val rsReg = issueStage.output(reg)
-        val (rsInRob, rsValue) = rob.findRegisterValue(rsReg)
+        val (rsInRob, rsValue, previousValid) = rob.findRegisterValue(rsReg)
 
         when(rsInRob) {
           when(rsValue.valid) {
@@ -429,6 +439,9 @@ class ReservationStation(
               regs.setReg(regData, rsValue.payload.writeValue)
             } otherwise {
               metaRs.waitingForRealNext := True
+              when(previousValid.valid && !rsCdbUpdate) {
+                regs.setReg(regData, previousValid.payload)
+              }
             }
             when(rsValue.previousWaw.valid) {
               metaRs.priorInstructionNext.push(rsValue.previousWaw.payload)
@@ -436,6 +449,9 @@ class ReservationStation(
           } otherwise {
             metaRs.priorInstructionNext.push(rsValue.payload.robIndex)
             metaRs.waitingForRealNext := True
+            when(previousValid.valid && !rsCdbUpdate) {
+              regs.setReg(regData, previousValid.payload)
+            }
           }
         }
 //        otherwise {
@@ -450,12 +466,14 @@ class ReservationStation(
 
     dependencySetup(
       meta.rs1,
+      rs1CdbUpdate,
       pipeline.data.RS1,
       pipeline.data.RS1_DATA,
       pipeline.data.RS1_TYPE
     )
     dependencySetup(
       meta.rs2,
+      rs2CdbUpdate,
       pipeline.data.RS2,
       pipeline.data.RS2_DATA,
       pipeline.data.RS2_TYPE
