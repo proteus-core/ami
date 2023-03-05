@@ -28,6 +28,7 @@ case class CdbMessage(metaRegisters: DynBundle[PipelineData[Data]], robIndexBits
 case class RdbMessage(retirementRegisters: DynBundle[PipelineData[Data]], robIndexBits: BitCount)
     extends Bundle {
   val robIndex = UInt(robIndexBits)
+  val previousWaw: Flow[UInt] = Flow(UInt(robIndexBits))
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
     retirementRegisters.createBundle
 }

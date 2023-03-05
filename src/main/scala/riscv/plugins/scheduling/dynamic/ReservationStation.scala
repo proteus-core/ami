@@ -220,7 +220,6 @@ class ReservationStation(
     dispatchStream.payload := resultDispatchMessage
 
     cdbStream.valid := False
-    resultCdbMessage.previousWaw := meta.previousWaw.priorInstruction
     cdbStream.payload := resultCdbMessage
 
     regs.shift := False
@@ -286,6 +285,7 @@ class ReservationStation(
 
       cdbStream.payload.activatingTaken := False
       cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
+      dispatchStream.payload.previousWaw := meta.previousWaw.priorInstruction
 
       cdbStream.payload.robIndex := robEntryIndex
       dispatchStream.payload.robIndex := robEntryIndex
@@ -338,6 +338,14 @@ class ReservationStation(
       when(!resultCdbMessage.realUpdate && cdbWaiting && meta.wawBufferNext.valid) {
         resultCdbMessage.realUpdate := meta.wawBufferNext.valid
         resultCdbMessage.writeValue := meta.wawBufferNext.payload
+      }
+
+      when(cdbWaiting) {
+        cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
+      }
+
+      when(dispatchWaiting) {
+        dispatchStream.payload.previousWaw := meta.previousWaw.priorInstruction
       }
 
       cdbStream.valid := cdbWaiting
