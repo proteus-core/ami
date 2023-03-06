@@ -42,7 +42,7 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
         new LoadManager(pipeline, stage, rob, registerBundle, cdbBMetaData)
       )
 
-      val cdb = new CommonDataBus(reservationStations, rob, cdbBMetaData, loadManagers.size)
+      val cdb = new CommonDataBus(reservationStations, loadManagers, rob, cdbBMetaData)
       cdb.build()
       for ((rs, index) <- reservationStations.zipWithIndex) {
         rs.build()

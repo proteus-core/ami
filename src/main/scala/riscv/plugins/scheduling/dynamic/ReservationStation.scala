@@ -335,13 +335,13 @@ class ReservationStation(
     // available again
     when(state === State.BROADCASTING_RESULT && !activeFlush) {
       // keep WAW up to date
-      when(!resultCdbMessage.realUpdate && cdbWaiting && meta.wawBufferNext.valid) {
-        resultCdbMessage.realUpdate := meta.wawBufferNext.valid
-        resultCdbMessage.writeValue := meta.wawBufferNext.payload
-      }
-
       when(cdbWaiting) {
         cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
+        when (!resultCdbMessage.realUpdate) {
+          resultCdbMessage.realUpdate := meta.wawBufferNext.valid
+          resultCdbMessage.writeValue := meta.wawBufferNext.payload
+
+        }
       }
 
       when(dispatchWaiting) {

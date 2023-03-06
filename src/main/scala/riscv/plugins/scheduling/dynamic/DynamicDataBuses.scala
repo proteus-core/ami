@@ -39,15 +39,15 @@ trait CdbListener {
 
 class CommonDataBus(
     reservationStations: Seq[ReservationStation],
+    loadManagers: Seq[LoadManager],
     rob: ReorderBuffer,
-    metaRegisters: DynBundle[PipelineData[Data]],
-    loadManagerCount: Int
+    metaRegisters: DynBundle[PipelineData[Data]]
 )(implicit config: Config)
     extends Area {
   val inputs: Vec[Stream[CdbMessage]] =
     Vec(
       Stream(HardType(CdbMessage(metaRegisters, rob.indexBits))),
-      reservationStations.size + loadManagerCount
+      reservationStations.size + loadManagers.size
     )
 
   private val arbitratedInputs = StreamArbiterFactory.roundRobin.noLock.on(inputs)
@@ -55,7 +55,7 @@ class CommonDataBus(
   def build(): Unit = {
     when(arbitratedInputs.valid) {
       arbitratedInputs.ready := True
-      val listeners = reservationStations :+ rob
+      val listeners = reservationStations ++ loadManagers :+ rob
       for (listener <- listeners) {
         listener.onCdbMessage(arbitratedInputs.payload)
       }

@@ -226,7 +226,7 @@ class ReorderBuffer(
         def handleExit(absolute: UInt): Unit = {
           val entry = robEntries(absolute)
           pushedEntry.mimicDependency.push(absolute)
-          when(entry.hasValue) {
+          when(entry.hasValue/* || entry.ready*/) {
             outac := entry.mmac
             outen := entry.mmen
             outex := entry.mmex
@@ -389,7 +389,7 @@ class ReorderBuffer(
           && regId =/= U(0)
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
-        when(entry.hasValue && registerType === RegisterType.GPR) {
+        when((entry.hasValue/* || entry.ready*/) && registerType === RegisterType.GPR) {
           previousValid.push(
             entry.registerMap.elementAs[UInt](
               pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
@@ -397,7 +397,7 @@ class ReorderBuffer(
           )
         }
         found := True
-        target.valid := entry.hasValue
+        target.valid := (entry.hasValue/* || entry.ready*/)
         target.robIndex := absolute
         target.previousWaw := entry.previousWaw
         target.writeValue := entry.registerMap.elementAs[UInt](
@@ -424,7 +424,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val isInProgress = !entry.hasValue
+      val isInProgress = !(entry.hasValue/* || entry.ready*/)
 
       val registerType =
         entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
@@ -458,7 +458,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val isInProgress = !entry.hasValue
+      val isInProgress = !(entry.hasValue/* || entry.ready*/)
       val isOlder = relativeIndexForAbsolute(absolute) < relativeIndexForAbsolute(robIndex)
 
       val registerType =
