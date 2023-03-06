@@ -311,7 +311,7 @@ class ReorderBuffer(
     robEntries(cdbMessage.robIndex).mmex := cdbMessage.mmex
     robEntries(cdbMessage.robIndex).previousWaw := cdbMessage.previousWaw
 
-    // TODO: what about branches?
+    // TODO: is this correct / needed?
     when(cdbMessage.realUpdate) {
       robEntries(cdbMessage.robIndex).registerMap
         .element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]) := RegisterType.GPR

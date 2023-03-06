@@ -306,7 +306,7 @@ class ReservationStation(
               .service[JumpService]
               .jumpRequested(exeStage)
           }
-          when(mim) {
+          when(mim && exeStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
             dispatchStream.payload.registerMap.element(
               pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
             ) := MimicryRegisterType.MIMIC_GPR
