@@ -271,9 +271,8 @@ class ReservationStation(
           cdbStream.payload.mmex := ex
 
           when(mim) {
-            // TODO: how to propagate this for mimicked loads? -> loadManager should also keep a wawbuffer and listen to cdb updates
-            cdbStream.payload.writeValue := meta.wawBufferNext.payload
-            cdbStream.payload.realUpdate := meta.wawBufferNext.valid
+            cdbStream.payload.writeValue := meta.wawBuffer.payload
+            cdbStream.payload.realUpdate := meta.wawBuffer.valid
           } otherwise {
             cdbStream.payload.writeValue := exeStage.output(pipeline.data.RD_DATA)
             cdbStream.payload.realUpdate := exeStage.output(pipeline.data.RD_DATA_VALID)
@@ -339,8 +338,8 @@ class ReservationStation(
       when(cdbWaiting) {
         cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
         when(!resultCdbMessage.realUpdate) {
-          resultCdbMessage.realUpdate := meta.wawBufferNext.valid
-          resultCdbMessage.writeValue := meta.wawBufferNext.payload
+          resultCdbMessage.realUpdate := meta.wawBuffer.valid
+          resultCdbMessage.writeValue := meta.wawBuffer.payload
 
         }
       }

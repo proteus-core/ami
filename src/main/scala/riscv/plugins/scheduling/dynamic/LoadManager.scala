@@ -151,8 +151,8 @@ class LoadManager(
       cdbStream.payload.robIndex := storedMessage.robIndex
 
       when(loadStage.output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR) {
-        cdbStream.payload.writeValue := wawBufferNext.payload
-        cdbStream.payload.realUpdate := wawBufferNext.valid
+        cdbStream.payload.writeValue := wawBuffer.payload
+        cdbStream.payload.realUpdate := wawBuffer.valid
       }
 
       cdbStream.previousWaw := previousWaw.priorInstruction
@@ -177,8 +177,8 @@ class LoadManager(
       when(cdbWaiting) {
         cdbStream.payload.previousWaw := previousWaw.priorInstruction
         when(!resultCdbMessage.realUpdate) {
-          resultCdbMessage.realUpdate := wawBufferNext.valid
-          resultCdbMessage.writeValue := wawBufferNext.payload
+          resultCdbMessage.realUpdate := wawBuffer.valid
+          resultCdbMessage.writeValue := wawBuffer.payload
 
         }
       }
