@@ -286,6 +286,7 @@ class ReservationStation(
       cdbStream.payload.activatingTaken := False
       cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
       dispatchStream.payload.previousWaw := meta.previousWaw.priorInstruction
+      dispatchStream.payload.wawBuffer := meta.wawBuffer
 
       cdbStream.payload.robIndex := robEntryIndex
       dispatchStream.payload.robIndex := robEntryIndex
@@ -337,7 +338,7 @@ class ReservationStation(
       // keep WAW up to date
       when(cdbWaiting) {
         cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
-        when (!resultCdbMessage.realUpdate) {
+        when(!resultCdbMessage.realUpdate) {
           resultCdbMessage.realUpdate := meta.wawBufferNext.valid
           resultCdbMessage.writeValue := meta.wawBufferNext.payload
 
@@ -346,6 +347,7 @@ class ReservationStation(
 
       when(dispatchWaiting) {
         dispatchStream.payload.previousWaw := meta.previousWaw.priorInstruction
+        dispatchStream.payload.wawBuffer := meta.wawBuffer
       }
 
       cdbStream.valid := cdbWaiting
@@ -447,6 +449,7 @@ class ReservationStation(
               regs.setReg(regData, rsValue.payload.writeValue)
             } otherwise {
               metaRs.waitingForRealNext := True
+              // TODO: move this out?
               when(previousValid.valid && !rsCdbUpdate) {
                 regs.setReg(regData, previousValid.payload)
               }

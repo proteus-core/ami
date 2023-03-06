@@ -59,7 +59,7 @@ class LoadManager(
 
     when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
       cdbUpdate := True
-      when(cdbMessage.realUpdate && !wawBuffer.valid) {
+      when(cdbMessage.realUpdate && !wawBufferNext.valid) {
         wawBuffer.push(cdbMessage.writeValue)
       }
       when(cdbMessage.previousWaw.valid) {
@@ -77,6 +77,7 @@ class LoadManager(
       ret := True
       storedMessage := rdbMessage
       previousWaw.priorInstructionNext := rdbMessage.previousWaw
+      wawBufferNext := rdbMessage.wawBuffer
       val address = pipeline.service[LsuService].addressOfBundle(rdbMessage.registerMap)
       when(!rob.hasPendingStoreForEntry(rdbMessage.robIndex, address)) {
         stateNext := State.EXECUTING

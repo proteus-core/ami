@@ -9,6 +9,8 @@ class Dispatcher(
     rob: ReorderBuffer,
     loadManagers: Seq[LoadManager],
     retirementRegisters: DynBundle[PipelineData[Data]]
+)(implicit
+    config: Config
 ) extends Area
     with Resettable {
   val rdbStream: Stream[RdbMessage] = Stream(

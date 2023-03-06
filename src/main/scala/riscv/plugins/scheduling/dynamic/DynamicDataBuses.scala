@@ -25,12 +25,18 @@ case class CdbMessage(metaRegisters: DynBundle[PipelineData[Data]], robIndexBits
   }
 }
 
-case class RdbMessage(retirementRegisters: DynBundle[PipelineData[Data]], robIndexBits: BitCount)
-    extends Bundle {
+case class RdbMessage(retirementRegisters: DynBundle[PipelineData[Data]], robIndexBits: BitCount)(
+    implicit config: Config
+) extends Bundle {
   val robIndex = UInt(robIndexBits)
+  val wawBuffer = Flow(UInt(config.xlen bits))
   val previousWaw: Flow[UInt] = Flow(UInt(robIndexBits))
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
     retirementRegisters.createBundle
+
+  override def clone(): RdbMessage = {
+    RdbMessage(retirementRegisters, robIndexBits)
+  }
 }
 
 trait CdbListener {
@@ -70,6 +76,8 @@ class DispatchBus(
     rob: ReorderBuffer,
     dispatcher: Dispatcher,
     retirementRegisters: DynBundle[PipelineData[Data]]
+)(implicit
+    config: Config
 ) extends Area {
   val inputs: Vec[Stream[RdbMessage]] =
     Vec(Stream(HardType(RdbMessage(retirementRegisters, rob.indexBits))), reservationStations.size)
@@ -88,6 +96,8 @@ class RobDataBus(
     rob: ReorderBuffer,
     retirementRegisters: DynBundle[PipelineData[Data]],
     loadManagerCount: Int
+)(implicit
+    config: Config
 ) extends Area {
   val inputs: Vec[Stream[RdbMessage]] = Vec(
     Stream(HardType(RdbMessage(retirementRegisters, rob.indexBits))),
