@@ -50,12 +50,12 @@ class LoadManager(
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
     cdbReceive := True
     val currentWaw = Flow(UInt(rob.indexBits))
+    currentWaw := previousWaw.priorInstructionNext
     // we need to keep track of WAW updates here as well
-    when(state === State.IDLE || stateNext === State.IDLE) {
-      currentWaw := previousWaw.priorInstructionNext
-    } otherwise {
-      currentWaw := previousWaw.priorInstruction
-    }
+//    when(state === State.IDLE || stateNext === State.IDLE) {
+//    } otherwise {
+//      currentWaw := previousWaw.priorInstruction
+//    }
 
     when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
       cdbUpdate := True
