@@ -85,22 +85,6 @@ class ReorderBuffer(
     oldestIndex.clear()
     newestIndex.clear()
     isFull := False
-    when(
-      robEntries(oldestIndex).ready && pipeline
-        .service[JumpService]
-        .jumpOfBundle(robEntries(oldestIndex).registerMap)
-    ) {
-      pipeline.serviceOption[MimicryService].foreach { mimicry =>
-        // could also take it from stage output i guess
-//        internalMMAC := mimicry.acOfBundle(robEntries(oldestIndex).registerMap)
-//        internalMMEN := mimicry.enOfBundle(robEntries(oldestIndex).registerMap)
-//        internalMMEX := mimicry.exOfBundle(robEntries(oldestIndex).registerMap)
-      }
-    } otherwise {
-//      internalMMAC := acCsr.read()
-//      internalMMEN := enCsr.read()
-//      internalMMEX := exCsr.read()
-    }
   }
 
   private def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -122,8 +106,6 @@ class ReorderBuffer(
     }
     ret
   }
-
-  val valid_5 = isValidAbsoluteIndex(5)
 
   private def relativeIndexForAbsolute(absolute: UInt): UInt = {
     val adjustedIndex = UInt(32 bits)
@@ -148,16 +130,6 @@ class ReorderBuffer(
       adjusted := absolute
     }
     adjusted
-  }
-
-  private def previousIndex(idx: UInt): Flow[UInt] = {
-    val result = Flow(UInt(indexBits))
-    result.setIdle()
-    val relative = relativeIndexForAbsolute(idx)
-    when(relative > 0) {
-      result.push(absoluteIndexForRelative(relative - 1).resized)
-    }
-    result
   }
 
   val pendingActivating = Flow(UInt(indexBits))
@@ -284,7 +256,6 @@ class ReorderBuffer(
           pushedEntry.pendingExit.push(nextPc)
         }
 
-        // TODO: can this mess with activating instructions?
         val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
         updateMeta(mmac, mmen, mmex)
 
@@ -299,7 +270,6 @@ class ReorderBuffer(
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
-    // TODO: make sure this is only done for still valid instructions
     robEntries(cdbMessage.robIndex).hasValue := True
     robEntries(cdbMessage.robIndex).registerMap
       .element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
@@ -311,7 +281,6 @@ class ReorderBuffer(
     robEntries(cdbMessage.robIndex).mmex := cdbMessage.mmex
     robEntries(cdbMessage.robIndex).previousWaw := cdbMessage.previousWaw
 
-    // TODO: is this correct / needed?
     when(cdbMessage.realUpdate) {
       robEntries(cdbMessage.robIndex).registerMap
         .element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]) := RegisterType.GPR
@@ -412,8 +381,6 @@ class ReorderBuffer(
     (found, target, previousValid)
   }
 
-  // TODO: wrapper function for these lookups? for (all) { condition(target, iter) ... }
-
   def findPreviousWaw(regId: UInt): Flow[UInt] = {
     val result = Flow(UInt(indexBits))
     result.setIdle()
@@ -436,42 +403,6 @@ class ReorderBuffer(
         isValidAbsoluteIndex(absolute)
           && sameTarget
           && isInProgress
-          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
-      ) {
-        result.push(absolute)
-      }
-    }
-    result
-  }
-
-  def findPreviousWawForEntry(robIndex: UInt): Flow[UInt] = {
-    val result = Flow(UInt(indexBits))
-    result.setIdle()
-
-    val regId = robEntries(robIndex).registerMap.elementAs[UInt](
-      pipeline.data.RD.asInstanceOf[PipelineData[Data]]
-    )
-
-    for (relative <- 0 until capacity) {
-      val absolute = UInt(indexBits)
-      absolute := absoluteIndexForRelative(relative).resized
-
-      val entry = robEntries(absolute)
-
-      val sameTarget = entry.registerMap.elementAs[UInt](
-        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
-      ) === regId
-      val isInProgress = !(entry.hasValue /* || entry.ready*/ )
-      val isOlder = relativeIndexForAbsolute(absolute) < relativeIndexForAbsolute(robIndex)
-
-      val registerType =
-        entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
-
-      when(
-        isValidAbsoluteIndex(absolute)
-          && sameTarget
-          && isInProgress
-          && isOlder
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
         result.push(absolute)
@@ -543,7 +474,7 @@ class ReorderBuffer(
     ret.connectOutputDefaults()
     ret.connectLastValues()
 
-    when(!isEmpty && oldestEntry.ready) { // TODO: + hasValue?
+    when(!isEmpty && oldestEntry.ready) {
       ret.arbitration.isValid := True
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>

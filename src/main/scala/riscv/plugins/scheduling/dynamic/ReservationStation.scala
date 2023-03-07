@@ -11,7 +11,7 @@ case class RegisterSource(indexBits: BitCount) extends Bundle {
     RegNext(priorInstructionNext).init(priorInstructionNext.getZero)
 
   val waitingForRealNext: Bool = Bool()
-  val waitingForReal: Bool = RegNext(waitingForRealNext).init(False) // TODO: is this needed?
+  val waitingForReal: Bool = RegNext(waitingForRealNext).init(False)
 
   def build(): Unit = {
     priorInstructionNext := priorInstruction
@@ -396,7 +396,6 @@ class ReservationStation(
       nextPc
     )
 
-    // TODO: here?
     when(!mimicDependency.valid) {
       pipeline.service[MimicryService].inputMeta(regs, mmac, mmen, mmex)
     }
@@ -405,11 +404,9 @@ class ReservationStation(
 
     stateNext := State.EXECUTING
     regs.shift := True
-//
-//    meta.reset() // TODO: is this needed? reset at the end of the previous anyway?
 
     // TODO: possible optimization to enable this if, but need to be careful with MM** updates
-//    when(!pipeline.service[MimicryService].isPersistent(issueStage)) { // TODO: could also be determined in the ROB, not sure which one is better
+//    when(!pipeline.service[MimicryService].isPersistent(issueStage)) { // could also be determined in the ROB, not sure which one is better
     meta.pendingActivating.priorInstructionNext := mimicDependency
     when(mimicDependency.valid) {
       stateNext := State.WAITING_FOR_ARGS
@@ -464,9 +461,6 @@ class ReservationStation(
             }
           }
         }
-//        otherwise {
-//          regs.setReg(regData, issueStage.output(regData))
-//        }
 
         when(rsInRob && !rsValue.valid) {
           stateNext := State.WAITING_FOR_ARGS

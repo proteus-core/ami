@@ -51,11 +51,6 @@ class LoadManager(
     cdbReceive := True
     val currentWaw = Flow(UInt(rob.indexBits))
     currentWaw := previousWaw.priorInstructionNext
-    // we need to keep track of WAW updates here as well
-//    when(state === State.IDLE || stateNext === State.IDLE) {
-//    } otherwise {
-//      currentWaw := previousWaw.priorInstruction
-//    }
 
     when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
       cdbUpdate := True
@@ -110,12 +105,6 @@ class LoadManager(
     when(activeFlush) {
       stateNext := State.IDLE
     }
-
-//    val regType =
-//      storedMessage.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
-//    when(regType === RegisterType.GPR || regType === MimicryRegisterType.MIMIC_GPR) {
-//      resultCdbMessage.previousWaw := rob.findPreviousWawForEntry(storedMessage.robIndex)
-//    }
 
     cdbStream.valid := False
     cdbStream.payload := resultCdbMessage
