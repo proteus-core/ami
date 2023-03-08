@@ -64,22 +64,12 @@ class ReorderBuffer(
   private val pushedEntry = RobEntry(retirementRegisters, indexBits)
   pushedEntry := RobEntry(retirementRegisters, indexBits).getZero
 
-  def readOnlyCsr(csrId: Int): CsrIo = {
-    val csrService = pipeline.service[CsrService]
-    val csr = csrService.getCsr(csrId)
-    csr.write := False
-    csr.wdata.assignDontCare()
-    csr
-  }
-
-  // TODO: not like this
-  private val CSR_MMAC = 0x7ff
-  private val CSR_MMENTRY = 0x7df // CSR identifier
-  private val CSR_MMEXIT = 0x7ef // CSR identifier
-
-  private val acCsr = readOnlyCsr(CSR_MMAC)
-  private val enCsr = readOnlyCsr(CSR_MMENTRY)
-  private val exCsr = readOnlyCsr(CSR_MMEXIT)
+  // save some work by keeping a copy of CSR values and not looking them up every cycle
+  private val MMAC = Reg(UInt(config.xlen bits)).init(0)
+  private val MMEN =
+    Reg(UInt(config.xlen bits)).init(pipeline.service[MimicryService].CSR_MMADDR_NONE)
+  private val MMEX =
+    Reg(UInt(config.xlen bits)).init(pipeline.service[MimicryService].CSR_MMADDR_NONE)
 
   def reset(): Unit = {
     oldestIndex.clear()
@@ -246,9 +236,9 @@ class ReorderBuffer(
 
         // if none found, csr also counts
         when(!found) {
-          outac := acCsr.read()
-          outen := enCsr.read()
-          outex := exCsr.read()
+          outac := MMAC
+          outen := MMEN
+          outex := MMEX
         }
 
         // if activating, set pendingExit
@@ -478,6 +468,9 @@ class ReorderBuffer(
       ret.arbitration.isValid := True
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
+        MMAC := oldestEntry.mmac
+        MMEN := oldestEntry.mmen
+        MMEX := oldestEntry.mmex
         mimicry.inputMeta(ret, oldestEntry.mmac, oldestEntry.mmen, oldestEntry.mmex)
 
         when(mimicry.isCtBranchOfBundle(oldestEntry.registerMap)) {

@@ -14,8 +14,6 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
   private val CSR_MMENTRY = 0x7df // CSR identifier
   private val CSR_MMEXIT = 0x7ef // CSR identifier
 
-  private val CSR_MMADDR_NONE = 0x7fffffff // TODO: which value?
-
   def isJump(ir: UInt): Bool = {
     (ir === Opcodes.JAL) ||
     (ir === Opcodes.JALR)

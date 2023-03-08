@@ -76,9 +76,7 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
       private val issueStage = pipeline.issuePipeline.stages.last
       issueStage.arbitration.isStalled := False
 
-      when(
-        issueStage.arbitration.isValid && issueStage.arbitration.isReady
-      ) {
+      when(issueStage.arbitration.isValid && issueStage.arbitration.isReady) {
         val fuMask = issueStage.output(PrivateRegisters.DEST_FU)
         val illegalInstruction = fuMask === 0
 
