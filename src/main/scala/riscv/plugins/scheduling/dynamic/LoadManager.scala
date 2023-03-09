@@ -15,6 +15,8 @@ class LoadManager(
     extends Area
     with Resettable
     with CdbListener {
+  setPartialName(s"LM_${loadStage.stageName}")
+
   val storedMessage: RdbMessage = RegInit(RdbMessage(retirementRegisters, rob.indexBits).getZero)
   val outputCache: RdbMessage = RegInit(RdbMessage(retirementRegisters, rob.indexBits).getZero)
   val rdbStream: Stream[RdbMessage] = Stream(

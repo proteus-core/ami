@@ -369,9 +369,6 @@ class ReservationStation(
   def execute(): Unit = {
     val issueStage = pipeline.issuePipeline.stages.last
 
-    val nextPc = UInt()
-    nextPc := issueStage.output(pipeline.data.NEXT_PC)
-
     // In the reservation station:
     // Information propagated from the ROB (execute):
     // Dependent instruction for RS1 and RS2
@@ -381,20 +378,7 @@ class ReservationStation(
     // with the same shadowActivating, or the csrs: if there was an activating branch, we either wait for it,
     // or it’s already resolved in the ROB)
 
-    // calculate next pc for activating jumps here
-    pipeline.serviceOption[MimicryService] foreach { mimicry =>
-      when(mimicry.isABranch(issueStage)) {
-        nextPc := issueStage.output(pipeline.data.PC) + issueStage.output(pipeline.data.IMM)
-      }
-    }
-
-    val (robIndex, mimicDependency, (mmac, mmen, mmex)) = rob.pushEntry(
-      issueStage.output(pipeline.data.RD),
-      issueStage.output(pipeline.data.RD_TYPE),
-      pipeline.service[LsuService].operationOutput(issueStage),
-      issueStage.output(pipeline.data.PC),
-      nextPc
-    )
+    val (robIndex, entryMeta, mimicDependency, (mmac, mmen, mmex)) = rob.pushEntry()
 
     when(!mimicDependency.valid) {
       pipeline.service[MimicryService].inputMeta(regs, mmac, mmen, mmex)
@@ -427,61 +411,45 @@ class ReservationStation(
     }
 
     def dependencySetup(
-        metaRs: RegisterSource,
-        rsCdbUpdate: Bool,
-        reg: PipelineData[UInt],
-        regData: PipelineData[UInt],
-        regType: PipelineData[SpinalEnumCraft[RegisterType.type]]
-    ): Unit = {
-      val rsUsed = issueStage.output(regType) === RegisterType.GPR
-
-      when(rsUsed) {
-        val rsReg = issueStage.output(reg)
-        val (rsInRob, rsValue, previousValid) = rob.findRegisterValue(rsReg)
-
-        when(rsInRob) {
-          when(rsValue.valid) {
-            when(rsValue.payload.realUpdate) {
-              regs.setReg(regData, rsValue.payload.writeValue)
+                         metaRs: RegisterSource,
+                         rsCdbUpdate: Bool,
+                         rsData: Flow[RsData],
+                         regData: PipelineData[UInt]
+                       ): Unit = {
+      when(rsData.valid) {
+        when(rsData.payload.updatingInstructionFound) {
+          when(rsData.payload.updatingInstructionFinished) {
+            when(!rsData.payload.updatingInstructionMimicked) {
+              regs.setReg(regData, rsData.payload.updatingInstructionValue)
             } otherwise {
               metaRs.waitingForRealNext := True
               // TODO: move this out?
-              when(previousValid.valid && !rsCdbUpdate) {
-                regs.setReg(regData, previousValid.payload)
+              when(rsData.payload.previousValid.valid && !rsCdbUpdate) {
+                regs.setReg(regData, rsData.payload.previousValid.payload)
               }
             }
-            when(rsValue.previousWaw.valid) {
-              metaRs.priorInstructionNext.push(rsValue.previousWaw.payload)
+            when(rsData.payload.previousWaw.valid) {
+              metaRs.priorInstructionNext.push(rsData.payload.previousWaw.payload)
             }
           } otherwise {
-            metaRs.priorInstructionNext.push(rsValue.payload.robIndex)
+            metaRs.priorInstructionNext.push(rsData.payload.updatingInstructionIndex)
             metaRs.waitingForRealNext := True
-            when(previousValid.valid && !rsCdbUpdate) {
-              regs.setReg(regData, previousValid.payload)
+            when(rsData.payload.previousValid.valid && !rsCdbUpdate) {
+              regs.setReg(regData, rsData.payload.previousValid.payload)
             }
           }
         }
 
-        when(rsInRob && !rsValue.valid) {
+        when(
+          rsData.payload.updatingInstructionFound && !rsData.payload.updatingInstructionFinished
+        ) {
           stateNext := State.WAITING_FOR_ARGS
         }
       }
     }
 
-    dependencySetup(
-      meta.rs1,
-      rs1CdbUpdate,
-      pipeline.data.RS1,
-      pipeline.data.RS1_DATA,
-      pipeline.data.RS1_TYPE
-    )
-    dependencySetup(
-      meta.rs2,
-      rs2CdbUpdate,
-      pipeline.data.RS2,
-      pipeline.data.RS2_DATA,
-      pipeline.data.RS2_TYPE
-    )
+    dependencySetup(meta.rs1, rs1CdbUpdate, entryMeta.rs1Data, pipeline.data.RS1_DATA)
+    dependencySetup(meta.rs2, rs2CdbUpdate, entryMeta.rs2Data, pipeline.data.RS2_DATA)
   }
 
   override def pipelineReset(): Unit = {

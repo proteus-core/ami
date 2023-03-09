@@ -10,7 +10,7 @@ CORE ?= riscv.CoreExtMem
 BUILD_CORE ?= 1
 
 PYTHON = python3
-RISCV_PREFIX ?= riscv64-unknown-elf
+RISCV_PREFIX ?= riscv32-unknown-elf
 CC = $(RISCV_PREFIX)-gcc
 LD = $(RISCV_PREFIX)-gcc
 OBJDUMP = $(RISCV_PREFIX)-objdump

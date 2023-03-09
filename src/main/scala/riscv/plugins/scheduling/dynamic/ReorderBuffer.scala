@@ -15,8 +15,8 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
 ) extends Bundle {
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
     retirementRegisters.createBundle
-  val ready = Bool()
-  val hasValue = Bool()
+  val rdbUpdated = Bool()
+  val cdbUpdated = Bool()
   val mimicDependency = Flow(UInt(indexBits))
   val previousWaw = Flow(UInt(indexBits))
   val pendingExit = Flow(UInt(config.xlen bits))
@@ -28,6 +28,25 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
 
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters, indexBits)
+  }
+}
+
+case class RsData(indexBits: BitCount)(implicit config: Config) extends Bundle {
+  val updatingInstructionFound = Bool()
+  val updatingInstructionFinished = Bool()
+  val updatingInstructionMimicked = Bool()
+  val updatingInstructionIndex = UInt(indexBits)
+  val updatingInstructionValue = UInt(config.xlen bits)
+  val previousValid = Flow(UInt(config.xlen bits))
+  val previousWaw = Flow(UInt(indexBits))
+}
+
+case class EntryMetadata(indexBits: BitCount)(implicit config: Config) extends Bundle {
+  val rs1Data = Flow(RsData(indexBits))
+  val rs2Data = Flow(RsData(indexBits))
+
+  override def clone(): EntryMetadata = {
+    EntryMetadata(indexBits)
   }
 }
 
@@ -128,25 +147,23 @@ class ReorderBuffer(
   val metaUpdateNeeded = Bool()
   metaUpdateNeeded := False
 
-  def pushEntry(
-      rd: UInt,
-      rdType: SpinalEnumCraft[RegisterType.type],
-      lsuOperationType: SpinalEnumCraft[LsuOperationType.type],
-      pc: UInt,
-      nextPc: UInt
-  ): (UInt, Flow[UInt], (UInt, UInt, UInt)) = {
+  def pushEntry(): (UInt, EntryMetadata, Flow[UInt], (UInt, UInt, UInt)) = {
+    val issueStage = pipeline.issuePipeline.stages.last
+
     pushInCycle := True
-    pushedEntry.ready := False
-    pushedEntry.hasValue := False
-    pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := pc
-    pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := rd
+    pushedEntry.rdbUpdated := False
+    pushedEntry.cdbUpdated := False
+    pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := issueStage.output(pipeline.data.PC)
+    pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := issueStage.output(pipeline.data.RD)
     pushedEntry.registerMap.element(
       pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
-    ) := rdType
-    pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := lsuOperationType
+    ) := issueStage.output(pipeline.data.RD_TYPE)
+    pipeline.service[LsuService].operationOfBundle(pushedEntry.registerMap) := pipeline
+      .service[LsuService]
+      .operationOutput(issueStage)
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
 
-    val issueStage = pipeline.issuePipeline.stages.last
+    val pc = issueStage.output(pipeline.data.PC)
 
     def updateMeta(mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
       pushedEntry.mmac := mmac
@@ -190,7 +207,7 @@ class ReorderBuffer(
         def handleExit(absolute: UInt): Unit = {
           val entry = robEntries(absolute)
           pushedEntry.mimicDependency.push(absolute)
-          when(entry.hasValue /* || entry.ready*/ ) {
+          when(entry.cdbUpdated /*|| entry.rdbUpdated*/) {
             outac := entry.mmac
             outen := entry.mmen
             outex := entry.mmex
@@ -243,6 +260,11 @@ class ReorderBuffer(
 
         // if activating, set pendingExit
         when(mimicry.isActivating(issueStage)) {
+          val nextPc = UInt()
+          nextPc := issueStage.output(pipeline.data.NEXT_PC)
+          when(mimicry.isABranch(issueStage)) {
+            nextPc := pc + issueStage.output(pipeline.data.IMM)
+          }
           pushedEntry.pendingExit.push(nextPc)
         }
 
@@ -256,11 +278,67 @@ class ReorderBuffer(
       }
     }
 
-    (newestIndex.value, pendingActivating, (pushedEntry.mmac, pushedEntry.mmen, pushedEntry.mmex))
+    val rs1 = Flow(UInt(5 bits))
+    val rs2 = Flow(UInt(5 bits))
+
+    rs1.valid := issueStage.output(pipeline.data.RS1_TYPE) === RegisterType.GPR
+    rs1.payload := issueStage.output(pipeline.data.RS1)
+
+    rs2.valid := issueStage.output(pipeline.data.RS2_TYPE) === RegisterType.GPR
+    rs2.payload := issueStage.output(pipeline.data.RS2)
+
+    (newestIndex.value, bookkeeping(rs1, rs2), pendingActivating, (pushedEntry.mmac, pushedEntry.mmen, pushedEntry.mmex))
+  }
+
+  private def bookkeeping(rs1Id: Flow[UInt], rs2Id: Flow[UInt]): EntryMetadata = {
+    val meta = EntryMetadata(indexBits)
+    meta.rs1Data.payload.assignDontCare()
+    meta.rs2Data.payload.assignDontCare()
+
+    meta.rs1Data.valid := rs1Id.valid
+    meta.rs2Data.valid := rs2Id.valid
+
+    def rsUpdate(rsId: Flow[UInt], index: UInt, entry: RobEntry, rsMeta: RsData): Unit = {
+      val registerType = entry.registerMap.element(
+        pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
+      )
+      when(
+        rsId.valid
+          && rsId.payload =/= 0
+          && entry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === rsId.payload
+          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
+      ) {
+        val value = entry.registerMap.elementAs[UInt](pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]])
+
+        when((entry.cdbUpdated /* || entry.ready*/) && registerType === RegisterType.GPR) {
+          rsMeta.previousValid.push(value)
+        }
+
+        rsMeta.previousWaw := entry.previousWaw
+        rsMeta.updatingInstructionMimicked := registerType === MIMIC_GPR
+
+        rsMeta.updatingInstructionFound := True
+        rsMeta.updatingInstructionFinished := (entry.cdbUpdated || entry.rdbUpdated)
+        rsMeta.updatingInstructionIndex := index
+        rsMeta.updatingInstructionValue := value
+      }
+    }
+
+    // loop through valid values and return the freshest if present
+    for (relative <- 0 until capacity) {
+      val absolute = absoluteIndexForRelative(relative).resized
+      val entry = robEntries(absolute)
+
+      when(isValidAbsoluteIndex(absolute)) {
+        rsUpdate(rs1Id, absolute, entry, meta.rs1Data.payload)
+        rsUpdate(rs2Id, absolute, entry, meta.rs2Data.payload)
+      }
+    }
+    meta
   }
 
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
-    robEntries(cdbMessage.robIndex).hasValue := True
+    robEntries(cdbMessage.robIndex).cdbUpdated := True
     robEntries(cdbMessage.robIndex).registerMap
       .element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
 
@@ -322,55 +400,6 @@ class ReorderBuffer(
     result
   }
 
-  def findRegisterValue(regId: UInt): (Bool, Flow[CdbMessage], Flow[UInt]) = {
-    val found = Bool()
-    found := False
-
-    val previousValid = Flow(UInt(config.xlen bits))
-    previousValid.setIdle()
-
-    val target = Flow(CdbMessage(metaRegisters, indexBits)) // TODO: refactor this to not use cdb?
-    target.valid := False
-    target.realUpdate := False
-    target.payload.robIndex := 0
-    target.payload.writeValue := 0
-    target.previousWaw.setIdle()
-
-    // loop through valid values and return the freshest if present
-    for (relative <- 0 until capacity) {
-      val absolute = UInt(indexBits)
-      absolute := absoluteIndexForRelative(relative).resized
-      val entry = robEntries(absolute)
-      val registerType =
-        entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
-
-      // last condition: prevent dependencies on x0
-      when(
-        isValidAbsoluteIndex(absolute)
-          && entry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === regId
-          && regId =/= U(0)
-          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
-      ) {
-        when((entry.hasValue /* || entry.ready*/ ) && registerType === RegisterType.GPR) {
-          previousValid.push(
-            entry.registerMap.elementAs[UInt](
-              pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
-            )
-          )
-        }
-        found := True
-        target.valid := (entry.hasValue /* || entry.ready*/ )
-        target.robIndex := absolute
-        target.previousWaw := entry.previousWaw
-        target.writeValue := entry.registerMap.elementAs[UInt](
-          pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]
-        )
-        target.realUpdate := registerType === RegisterType.GPR
-      }
-    }
-    (found, target, previousValid)
-  }
-
   def findPreviousWaw(regId: UInt): Flow[UInt] = {
     val result = Flow(UInt(indexBits))
     result.setIdle()
@@ -384,7 +413,7 @@ class ReorderBuffer(
       val sameTarget = entry.registerMap.elementAs[UInt](
         pipeline.data.RD.asInstanceOf[PipelineData[Data]]
       ) === regId
-      val isInProgress = !(entry.hasValue /* || entry.ready*/ )
+      val isInProgress = !(entry.cdbUpdated /* || entry.ready*/ )
 
       val registerType =
         entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
@@ -442,7 +471,9 @@ class ReorderBuffer(
         .jumpOfBundle(robEntries(rdbMessage.robIndex).registerMap) := True
     }
 
-    robEntries(rdbMessage.robIndex).ready := True
+    // TODO: update mm** registers
+
+    robEntries(rdbMessage.robIndex).rdbUpdated := True
   }
 
   def build(): Unit = {
@@ -464,7 +495,13 @@ class ReorderBuffer(
     ret.connectOutputDefaults()
     ret.connectLastValues()
 
-    when(!isEmpty && oldestEntry.ready) {
+    when(
+      !isEmpty && oldestEntry.rdbUpdated && (oldestEntry.cdbUpdated || (!oldestEntry.registerMap
+        .elementAs[Bool](pipeline.data.RD_DATA_VALID.asInstanceOf[PipelineData[Data]]) &&
+        pipeline
+          .service[LsuService]
+          .operationOfBundle(oldestEntry.registerMap) =/= LsuOperationType.LOAD))
+    ) {
       ret.arbitration.isValid := True
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
@@ -477,14 +514,14 @@ class ReorderBuffer(
           pipeline.service[FetchService].flushCache(ret)
         }
       }
-    }
 
-    when(!isEmpty && oldestEntry.ready && ret.arbitration.isDone) {
-      // removing the oldest entry
-      updatedOldestIndex := oldestIndex.valueNext
-      oldestIndex.increment()
-      willRetire := True
-      isFullNext := False
+      when(ret.arbitration.isDone) {
+        // removing the oldest entry
+        updatedOldestIndex := oldestIndex.valueNext
+        oldestIndex.increment()
+        willRetire := True
+        isFullNext := False
+      }
     }
 
     when(pushInCycle) {
