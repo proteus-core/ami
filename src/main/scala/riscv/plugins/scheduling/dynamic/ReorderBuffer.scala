@@ -45,6 +45,12 @@ case class EntryMetadata(indexBits: BitCount)(implicit config: Config) extends B
   val rs1Data = Flow(RsData(indexBits))
   val rs2Data = Flow(RsData(indexBits))
 
+  val mmac = UInt(config.xlen bits)
+  val mmen = UInt(config.xlen bits)
+  val mmex = UInt(config.xlen bits)
+
+  val previousWaw = Flow(UInt(indexBits))
+
   override def clone(): EntryMetadata = {
     EntryMetadata(indexBits)
   }
@@ -153,8 +159,10 @@ class ReorderBuffer(
     pushInCycle := True
     pushedEntry.rdbUpdated := False
     pushedEntry.cdbUpdated := False
-    pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := issueStage.output(pipeline.data.PC)
-    pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := issueStage.output(pipeline.data.RD)
+    pushedEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) := issueStage
+      .output(pipeline.data.PC)
+    pushedEntry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) := issueStage
+      .output(pipeline.data.RD)
     pushedEntry.registerMap.element(
       pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
     ) := issueStage.output(pipeline.data.RD_TYPE)
@@ -163,13 +171,24 @@ class ReorderBuffer(
       .operationOutput(issueStage)
     pipeline.service[LsuService].addressValidOfBundle(pushedEntry.registerMap) := False
 
-    val pc = issueStage.output(pipeline.data.PC)
+    val rs1 = Flow(UInt(5 bits))
+    val rs2 = Flow(UInt(5 bits))
+    val rd = Flow(UInt(5 bits))
 
-    def updateMeta(mmac: UInt, mmen: UInt, mmex: UInt): Unit = {
-      pushedEntry.mmac := mmac
-      pushedEntry.mmen := mmen
-      pushedEntry.mmex := mmex
-    }
+    rs1.valid := issueStage.output(pipeline.data.RS1_TYPE) === RegisterType.GPR
+    rs1.payload := issueStage.output(pipeline.data.RS1)
+
+    rs2.valid := issueStage.output(pipeline.data.RS2_TYPE) === RegisterType.GPR
+    rs2.payload := issueStage.output(pipeline.data.RS2)
+
+    rd.valid := issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR || issueStage.output(
+      pipeline.data.RD_TYPE
+    ) === MimicryRegisterType.MIMIC_GPR
+    rd.payload := issueStage.output(pipeline.data.RD)
+
+    val entryMeta = bookkeeping(rs1, rs2, rd)
+
+    val pc = issueStage.output(pipeline.data.PC)
 
     def localUpdate(mmac: UInt, mmen: UInt, mmex: UInt): (UInt, UInt, UInt) = {
       val outac = UInt(config.xlen bits)
@@ -194,12 +213,9 @@ class ReorderBuffer(
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       {
-        val outac = UInt(config.xlen bits)
-        outac := 0
-        val outen = UInt(config.xlen bits)
-        outen := 0
-        val outex = UInt(config.xlen bits)
-        outex := 0
+        val outac = entryMeta.mmac
+        val outen = entryMeta.mmen
+        val outex = entryMeta.mmex
 
         val found = Bool()
         found := False
@@ -207,7 +223,7 @@ class ReorderBuffer(
         def handleExit(absolute: UInt): Unit = {
           val entry = robEntries(absolute)
           pushedEntry.mimicDependency.push(absolute)
-          when(entry.cdbUpdated /*|| entry.rdbUpdated*/) {
+          when(entry.cdbUpdated /*|| entry.rdbUpdated*/ ) {
             outac := entry.mmac
             outen := entry.mmen
             outex := entry.mmex
@@ -234,30 +250,6 @@ class ReorderBuffer(
           }
         }
 
-        for (relative <- 0 until capacity) {
-          val absolute = absoluteIndexForRelative(relative).resized
-
-          val entry = robEntries(absolute)
-          // if none found, copy MM from most recent instruction with no deps (or csr)
-          when(
-            isValidAbsoluteIndex(
-              absolute
-            ) && !entry.mimicDependency.valid && !pushedEntry.mimicDependency.valid
-          ) {
-            found := True
-            outac := entry.mmac
-            outen := entry.mmen
-            outex := entry.mmex
-          }
-        }
-
-        // if none found, csr also counts
-        when(!found) {
-          outac := MMAC
-          outen := MMEN
-          outex := MMEX
-        }
-
         // if activating, set pendingExit
         when(mimicry.isActivating(issueStage)) {
           val nextPc = UInt()
@@ -269,34 +261,37 @@ class ReorderBuffer(
         }
 
         val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
-        updateMeta(mmac, mmen, mmex)
+        pushedEntry.mmac := mmac
+        pushedEntry.mmen := mmen
+        pushedEntry.mmex := mmex
 
         when(metaUpdateNeeded) {
           pendingActivating := pushedEntry.mimicDependency
         }
-
       }
     }
 
-    val rs1 = Flow(UInt(5 bits))
-    val rs2 = Flow(UInt(5 bits))
-
-    rs1.valid := issueStage.output(pipeline.data.RS1_TYPE) === RegisterType.GPR
-    rs1.payload := issueStage.output(pipeline.data.RS1)
-
-    rs2.valid := issueStage.output(pipeline.data.RS2_TYPE) === RegisterType.GPR
-    rs2.payload := issueStage.output(pipeline.data.RS2)
-
-    (newestIndex.value, bookkeeping(rs1, rs2), pendingActivating, (pushedEntry.mmac, pushedEntry.mmen, pushedEntry.mmex))
+    (
+      newestIndex.value,
+      entryMeta,
+      pendingActivating,
+      (pushedEntry.mmac, pushedEntry.mmen, pushedEntry.mmex)
+    )
   }
 
-  private def bookkeeping(rs1Id: Flow[UInt], rs2Id: Flow[UInt]): EntryMetadata = {
+  private def bookkeeping(rs1Id: Flow[UInt], rs2Id: Flow[UInt], rdId: Flow[UInt]): EntryMetadata = {
     val meta = EntryMetadata(indexBits)
     meta.rs1Data.payload.assignDontCare()
     meta.rs2Data.payload.assignDontCare()
 
     meta.rs1Data.valid := rs1Id.valid
     meta.rs2Data.valid := rs2Id.valid
+
+    meta.mmac := MMAC
+    meta.mmen := MMEN
+    meta.mmex := MMEX
+
+    meta.previousWaw.setIdle()
 
     def rsUpdate(rsId: Flow[UInt], index: UInt, entry: RobEntry, rsMeta: RsData): Unit = {
       val registerType = entry.registerMap.element(
@@ -305,12 +300,15 @@ class ReorderBuffer(
       when(
         rsId.valid
           && rsId.payload =/= 0
-          && entry.registerMap.element(pipeline.data.RD.asInstanceOf[PipelineData[Data]]) === rsId.payload
+          && entry.registerMap.element(
+            pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+          ) === rsId.payload
           && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
-        val value = entry.registerMap.elementAs[UInt](pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]])
+        val value =
+          entry.registerMap.elementAs[UInt](pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]])
 
-        when((entry.cdbUpdated /* || entry.ready*/) && registerType === RegisterType.GPR) {
+        when((entry.cdbUpdated /*|| entry.rdbUpdated*/ ) && registerType === RegisterType.GPR) {
           rsMeta.previousValid.push(value)
         }
 
@@ -332,6 +330,28 @@ class ReorderBuffer(
       when(isValidAbsoluteIndex(absolute)) {
         rsUpdate(rs1Id, absolute, entry, meta.rs1Data.payload)
         rsUpdate(rs2Id, absolute, entry, meta.rs2Data.payload)
+
+        when(!entry.mimicDependency.valid) {
+          meta.mmac := entry.mmac
+          meta.mmen := entry.mmen
+          meta.mmex := entry.mmex
+        }
+
+        val sameTarget = entry.registerMap.elementAs[UInt](
+          pipeline.data.RD.asInstanceOf[PipelineData[Data]]
+        ) === rdId.payload
+
+        val registerType =
+          entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
+
+        when(
+          rdId.valid
+            && sameTarget
+            && !(entry.cdbUpdated /* || entry.ready*/ )
+            && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
+        ) {
+          meta.previousWaw.push(absolute)
+        }
       }
     }
     meta
@@ -393,36 +413,6 @@ class ReorderBuffer(
         isValidAbsoluteIndex(
           absolute
         ) && entry.pendingExit.valid
-      ) {
-        result.push(absolute)
-      }
-    }
-    result
-  }
-
-  def findPreviousWaw(regId: UInt): Flow[UInt] = {
-    val result = Flow(UInt(indexBits))
-    result.setIdle()
-
-    for (relative <- 0 until capacity) {
-      val absolute = UInt(indexBits)
-      absolute := absoluteIndexForRelative(relative).resized
-
-      val entry = robEntries(absolute)
-
-      val sameTarget = entry.registerMap.elementAs[UInt](
-        pipeline.data.RD.asInstanceOf[PipelineData[Data]]
-      ) === regId
-      val isInProgress = !(entry.cdbUpdated /* || entry.ready*/ )
-
-      val registerType =
-        entry.registerMap.element(pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]])
-
-      when(
-        isValidAbsoluteIndex(absolute)
-          && sameTarget
-          && isInProgress
-          && (registerType === RegisterType.GPR || registerType === MIMIC_GPR)
       ) {
         result.push(absolute)
       }

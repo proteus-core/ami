@@ -398,24 +398,18 @@ class ReservationStation(
 //    }
 
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
-      when(
-        issueStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR || issueStage
-          .output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
-      ) {
-        val previousWaw = rob.findPreviousWaw(issueStage.output(pipeline.data.RD))
-        meta.previousWaw.priorInstructionNext := previousWaw
-        when(previousWaw.valid) {
-          stateNext := State.WAITING_FOR_ARGS
-        }
+      meta.previousWaw.priorInstructionNext := entryMeta.previousWaw
+      when(entryMeta.previousWaw.valid) {
+        stateNext := State.WAITING_FOR_ARGS
       }
     }
 
     def dependencySetup(
-                         metaRs: RegisterSource,
-                         rsCdbUpdate: Bool,
-                         rsData: Flow[RsData],
-                         regData: PipelineData[UInt]
-                       ): Unit = {
+        metaRs: RegisterSource,
+        rsCdbUpdate: Bool,
+        rsData: Flow[RsData],
+        regData: PipelineData[UInt]
+    ): Unit = {
       when(rsData.valid) {
         when(rsData.payload.updatingInstructionFound) {
           when(rsData.payload.updatingInstructionFinished) {
