@@ -96,10 +96,96 @@ class ReorderBuffer(
   private val MMEX =
     Reg(UInt(config.xlen bits)).init(pipeline.service[MimicryService].CSR_MMADDR_NONE)
 
+  case class MimicryStackEntry() extends Bundle {
+    val robId = UInt(indexBits)
+    val exit = UInt(config.xlen bits)
+  }
+
+  private val mimicryStack = Vec.fill(capacity)(RegInit(MimicryStackEntry().getZero))
+  private val stackOldestIndex = Counter(capacity).init(1)
+  private val stackNewestIndex = Counter(capacity)
+
+  private val stackBottomRemoveNow = Bool()
+  stackBottomRemoveNow := False
+  private val stackPushNow = Bool()
+  stackPushNow := False
+  private val stackPopNow = Bool()
+  stackPopNow := False
+  private val pushedStackEntry = MimicryStackEntry()
+  pushedStackEntry.assignDontCare()
+
+  // stack management
+  private val singleElement = stackOldestIndex === stackNewestIndex
+
+  private def nextIndex(index: UInt) = {
+    val result = U(0)
+    when(index =/= capacity - 1) {
+      result := index + 1
+    }
+    result
+  }
+
+  private def stackEmpty(): Bool = {
+    stackOldestIndex === nextIndex(stackNewestIndex)
+  }
+
+  private def pushToStack(id: UInt, exit: UInt) = {
+    stackNewestIndex.increment()
+    mimicryStack(stackNewestIndex.valueNext).robId := id
+    mimicryStack(stackNewestIndex.valueNext).exit := exit
+  }
+
+  private def stackTop(): Flow[MimicryStackEntry] = {
+    val result = Flow(MimicryStackEntry())
+    result.setIdle()
+    when(!stackEmpty()) {
+      result.push(mimicryStack(stackNewestIndex))
+    }
+    result
+  }
+
+  private def stackUnderTop(): Flow[MimicryStackEntry] = {
+    val result = Flow(MimicryStackEntry())
+    result.setIdle()
+    val previous = stackNewestIndex - 1
+    when(stackNewestIndex === 0) {
+      previous := capacity - 1
+    }
+    when(!singleElement) {
+      result.push(mimicryStack(previous))
+    }
+    result
+  }
+
+  private def stackPop(): Unit = {
+    when(stackNewestIndex === 0) {
+      stackNewestIndex := capacity - 1
+    } otherwise {
+      stackNewestIndex := stackNewestIndex - 1
+    }
+  }
+
+  private def stackBottom(): Flow[MimicryStackEntry] = {
+    val result = Flow(MimicryStackEntry())
+    result.setIdle()
+    when(!stackEmpty()) {
+      result.push(mimicryStack(stackOldestIndex))
+    }
+    result
+  }
+
+  private def removeBottom() = {
+    stackOldestIndex.increment()
+    stackBottomRemoveNow := True
+  }
+
   def reset(): Unit = {
     oldestIndex.clear()
     newestIndex.clear()
     isFull := False
+
+    stackOldestIndex := 1
+    stackNewestIndex.clear()
   }
 
   private def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -152,6 +238,9 @@ class ReorderBuffer(
 
   val metaUpdateNeeded = Bool()
   metaUpdateNeeded := False
+
+  val secondP = Bool()
+  secondP := False
 
   def pushEntry(): (UInt, EntryMetadata, Flow[UInt], (UInt, UInt, UInt)) = {
     val issueStage = pipeline.issuePipeline.stages.last
@@ -232,20 +321,28 @@ class ReorderBuffer(
           }
         }
 
+        val noPush = False
+
         // find first prior instruction with pendingExit
-        val priorPending = findPreviousActiveActivating()
+        val priorPending = stackTop()
         when(priorPending.valid) {
-          when(robEntries(priorPending.payload).pendingExit.payload === pc) {
-            robEntries(priorPending.payload).pendingExit.setIdle()
-            val secondPending = findPreviousActiveActivating(priorPending.payload)
+          when(priorPending.exit === pc) {
+            stackPopNow := True
+//            when(mimicry.isActivating(issueStage)) {
+//              noPush := True
+//            } otherwise {
+//              stackPop()
+//            }
+            val secondPending = stackUnderTop()
             // if pc == pendingExit, remove this pendingExit, look for the next one, then (if valid, copy MM, if not valid, depend on it)
             when(secondPending.valid) {
-              handleExit(secondPending.payload)
+              secondP := True
+              handleExit(secondPending.robId)
               found := True
             }
           } otherwise {
             // if pc != pendingExit, (if valid, copy MM, if not valid, depend on it)
-            handleExit(priorPending.payload)
+            handleExit(priorPending.robId)
             found := True
           }
         }
@@ -258,6 +355,41 @@ class ReorderBuffer(
             nextPc := pc + issueStage.output(pipeline.data.IMM)
           }
           pushedEntry.pendingExit.push(nextPc)
+          pushedStackEntry.robId := newestIndex
+          pushedStackEntry.exit := nextPc
+          stackPushNow := True
+        }
+
+        when(stackPopNow) {
+          // implies >= 1 entries
+          when(singleElement) {
+            // single entry in stack
+            when(stackBottomRemoveNow) {
+              // don't remove from two sides
+              when(stackPushNow) {
+                pushToStack(pushedStackEntry.robId, pushedStackEntry.exit)
+              }
+            } otherwise {
+              when(stackPushNow) {
+                mimicryStack(stackNewestIndex).robId := pushedStackEntry.robId
+                mimicryStack(stackNewestIndex).exit := pushedStackEntry.exit
+              } otherwise {
+                stackPop()
+              }
+            }
+          } otherwise {
+            // multiple entries in stack
+            when(stackPushNow) {
+              mimicryStack(stackNewestIndex).robId := pushedStackEntry.robId
+              mimicryStack(stackNewestIndex).exit := pushedStackEntry.exit
+            } otherwise {
+              stackPop()
+            }
+          }
+        } otherwise {
+          when(stackPushNow) {
+            pushToStack(pushedStackEntry.robId, pushedStackEntry.exit)
+          }
         }
 
         val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
@@ -378,48 +510,6 @@ class ReorderBuffer(
     }
   }
 
-  private def findPreviousActiveActivating(previousShadow: UInt): Flow[UInt] = {
-    val result = Flow(UInt(indexBits))
-    result.setIdle()
-
-    for (relative <- 0 until capacity) {
-      val absolute = UInt(indexBits)
-      absolute := absoluteIndexForRelative(relative).resized
-
-      val entry = robEntries(absolute)
-
-      when(
-        isValidAbsoluteIndex(
-          absolute
-        ) && entry.pendingExit.valid && absolute =/= previousShadow
-      ) {
-        result.push(absolute)
-      }
-    }
-    result
-  }
-
-  private def findPreviousActiveActivating(): Flow[UInt] = {
-    val result = Flow(UInt(indexBits))
-    result.setIdle()
-
-    for (relative <- 0 until capacity) {
-      val absolute = UInt(indexBits)
-      absolute := absoluteIndexForRelative(relative).resized
-
-      val entry = robEntries(absolute)
-
-      when(
-        isValidAbsoluteIndex(
-          absolute
-        ) && entry.pendingExit.valid
-      ) {
-        result.push(absolute)
-      }
-    }
-    result
-  }
-
   def hasPendingStoreForEntry(robIndex: UInt, address: UInt): Bool = {
     val found = Bool()
     found := False
@@ -506,6 +596,10 @@ class ReorderBuffer(
       }
 
       when(ret.arbitration.isDone) {
+        val bottom = stackBottom()
+        when(bottom.valid && bottom.robId === oldestIndex) {
+          removeBottom()
+        }
         // removing the oldest entry
         updatedOldestIndex := oldestIndex.valueNext
         oldestIndex.increment()
