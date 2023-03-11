@@ -443,7 +443,6 @@ trait DataHazardService {
 
 trait MimicryService {
   val CSR_MMADDR_NONE = 0x7fffffff
-  def isCtBranchOfBundle(registerMap: Bundle with DynBundleAccess[PipelineData[Data]]): Bool
 
   def isGhost(stage: Stage): Bool
 

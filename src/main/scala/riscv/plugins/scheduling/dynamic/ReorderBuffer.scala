@@ -589,10 +589,6 @@ class ReorderBuffer(
         MMEN := oldestEntry.mmen
         MMEX := oldestEntry.mmex
         mimicry.inputMeta(ret, oldestEntry.mmac, oldestEntry.mmen, oldestEntry.mmex)
-
-        when(mimicry.isCtBranchOfBundle(oldestEntry.registerMap)) {
-          pipeline.service[FetchService].flushCache(ret)
-        }
       }
 
       when(ret.arbitration.isDone) {

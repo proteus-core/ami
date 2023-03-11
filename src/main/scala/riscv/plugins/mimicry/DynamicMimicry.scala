@@ -4,7 +4,7 @@ import riscv._
 import spinal.core._
 import spinal.lib.slave
 
-class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with MimicryService {
+class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[DynamicPipeline] with MimicryService {
 
   override def getImplementedExtensions = Seq('X')
 
@@ -38,17 +38,11 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     // Activating control-flow
     object AJUMP extends PipelineData(Bool()) // Activating jump
     object ABRANCH extends PipelineData(Bool()) // Activating branch
-    object OUTCOME extends PipelineData(Bool()) // Branch outcome
-
-    // Constant-timeness
-    object CTBRANCH extends PipelineData(Bool()) // CT conditional branch
 
     // CSR data
     object MMEXIT extends PipelineData(UInt(32 bits)) // Mimicry exit address
     object MMENTRY extends PipelineData(UInt(32 bits)) // Mimicry entry address
     object MMAC extends PipelineData(UInt(32 bits)) // Activation counter
-    object MM_WRITE_AC extends PipelineData(Bool()) // Update AC?
-    object MM_WRITE_BOUNDS extends PipelineData(Bool()) // Update entry/exit?
   }
 
   // Mimicry mode entry
@@ -98,21 +92,13 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
           // Activating control-flow
           Data.AJUMP -> False,
           Data.ABRANCH -> False,
-          Data.OUTCOME -> False,
-
-          // Constant-timeness
-          Data.CTBRANCH -> False,
 
           // CSR updates
-          Data.MM_WRITE_AC -> False,
-          Data.MM_WRITE_BOUNDS -> False,
           Data.MMAC -> U(0),
           Data.MMENTRY -> U(0),
           Data.MMEXIT -> U(0)
         )
       )
-
-      val stage = pipeline.retirementStage
 
       config.setIrMapper((stage, ir) => {
         val result = ir | 3
@@ -122,7 +108,7 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
         switch(ir(1 downto 0)) {
           is(0) {
             when(conditional) {
-              stage.output(Data.CTBRANCH) := True
+//              stage.output(Data.CTBRANCH) := True
             } otherwise {
               stage.output(Data.GHOST) := True
             }
@@ -151,35 +137,27 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
       })
     }
 
-    pipeline.service[BranchService].onBranch { (stage, _, taken) =>
-      when(!taken && stage.value(Data.CTBRANCH)) {
-        stage.arbitration.jumpRequested := True // probably not needed
-        pipeline.service[JumpService].jumpRequested(stage) := True
-        //        pipeline.service[FetchService].flushCache(stage)
-      }
-    }
+//    pipeline.service[BranchService].onBranch { (stage, _, taken) =>
+//      when(!taken && stage.value(Data.CTBRANCH)) {
+//        stage.arbitration.jumpRequested := True // probably not needed
+//        pipeline.service[JumpService].jumpRequested(stage) := True
+//        //        pipeline.service[FetchService].flushCache(stage)
+//      }
+//    }
 
     // Since the CSR forwarding logic only accesses these WB output in the finish() phase, they are
     // not automatically routed (because the routing uses the information available *before*
     // finish()). Therefore, we have to manually inform the router that these outputs will be
     // needed.
-    for (stage <- pipeline.stages) {
-      stage.output(Data.MM_WRITE_BOUNDS)
-      stage.output(Data.MM_WRITE_AC)
-      stage.output(Data.MMAC)
-      stage.output(Data.MMENTRY)
-      stage.output(Data.MMEXIT)
-      stage.output(Data.CTBRANCH)
-      stage.output(Data.AJUMP)
-      stage.output(Data.ABRANCH)
-      stage.output(Data.OUTCOME)
-      stage.output(Data.GHOST)
-      stage.output(Data.MIMIC)
-      stage.output(Data.PERSISTENT)
-    }
-
-    if (config.debug) {
-      // Needed for the tests
+    for (stage <- pipeline.rsStages :+ pipeline.retirementStage) {
+      stage.value(Data.MMAC)
+      stage.value(Data.MMENTRY)
+      stage.value(Data.MMEXIT)
+      stage.value(Data.AJUMP)
+      stage.value(Data.ABRANCH)
+      stage.value(Data.GHOST)
+      stage.value(Data.MIMIC)
+      stage.value(Data.PERSISTENT)
     }
   }
 
@@ -267,12 +245,8 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[Pipeline] with Mimicr
     bundle.elementAs[UInt](Data.MMEXIT.asInstanceOf[PipelineData[Data]])
   }
 
-  override def isCtBranchOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): Bool = {
-    bundle.elementAs[Bool](Data.CTBRANCH.asInstanceOf[PipelineData[Data]])
-  }
-
   override def isSensitiveBranch(stage: Stage): Bool = {
-    stage.output(Data.CTBRANCH) || stage.output(Data.ABRANCH)
+    stage.output(Data.ABRANCH)
   }
 
   override def determineOutcomes(
