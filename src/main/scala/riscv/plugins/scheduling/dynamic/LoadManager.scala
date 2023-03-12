@@ -32,8 +32,10 @@ class LoadManager(
 
   val previousWaw: RegisterSource = RegisterSource(rob.indexBits)
 
-  val wawBufferNext = Flow(UInt(config.xlen bits))
-  val wawBuffer = RegNext(wawBufferNext).init(wawBufferNext.getZero)
+  val wawBufferValidNext = Bool()
+  val wawBufferValid = RegNext(wawBufferValidNext).init(False)
+
+  val wawBuffer = Reg(UInt(config.xlen bits)).init(0)
 
   private object State extends SpinalEnum {
     val IDLE, WAITING_FOR_STORE, EXECUTING, BROADCASTING_RESULT = newElement()
@@ -48,8 +50,9 @@ class LoadManager(
     currentWaw := previousWaw.priorInstructionNext
 
     when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
-      when(cdbMessage.realUpdate && !wawBufferNext.valid) {
-        wawBuffer.push(cdbMessage.writeValue)
+      when(cdbMessage.realUpdate && !wawBufferValidNext) {
+        wawBuffer := cdbMessage.writeValue
+        wawBufferValid := True
       }
       when(cdbMessage.previousWaw.valid) {
         previousWaw.priorInstruction.push(cdbMessage.previousWaw.payload)
@@ -66,7 +69,8 @@ class LoadManager(
       ret := True
       storedMessage := rdbMessage
       previousWaw.priorInstructionNext := rdbMessage.previousWaw
-      wawBufferNext := rdbMessage.wawBuffer
+      wawBufferValidNext := rdbMessage.wawBuffer.valid
+      wawBuffer := rdbMessage.wawBuffer.payload
       val address = pipeline.service[LsuService].addressOfBundle(rdbMessage.registerMap)
       when(!rob.hasPendingStoreForEntry(rdbMessage.robIndex, address)) {
         stateNext := State.EXECUTING
@@ -83,7 +87,7 @@ class LoadManager(
     activeFlush := False
 
     previousWaw.build()
-    wawBufferNext := wawBuffer
+    wawBufferValidNext := wawBufferValid
 
     when(state === State.IDLE) {
       isAvailable := !activeFlush
@@ -134,8 +138,8 @@ class LoadManager(
       cdbStream.payload.robIndex := storedMessage.robIndex
 
       when(loadStage.output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR) {
-        cdbStream.payload.writeValue := wawBuffer.payload
-        cdbStream.payload.realUpdate := wawBuffer.valid
+        cdbStream.payload.writeValue := wawBuffer
+        cdbStream.payload.realUpdate := wawBufferValid
       }
 
       cdbStream.previousWaw := previousWaw.priorInstruction
@@ -160,8 +164,8 @@ class LoadManager(
       when(cdbWaiting) {
         cdbStream.payload.previousWaw := previousWaw.priorInstruction
         when(!resultCdbMessage.realUpdate) {
-          resultCdbMessage.realUpdate := wawBuffer.valid
-          resultCdbMessage.writeValue := wawBuffer.payload
+          resultCdbMessage.realUpdate := wawBufferValid
+          resultCdbMessage.writeValue := wawBuffer
 
         }
       }

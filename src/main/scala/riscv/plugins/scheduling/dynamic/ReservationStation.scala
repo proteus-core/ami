@@ -30,8 +30,10 @@ case class InstructionDependencies(indexBits: BitCount)(implicit config: Config)
   val pendingActivating: RegisterSource = RegisterSource(indexBits)
   val previousWaw: RegisterSource = RegisterSource(indexBits)
 
-  val wawBufferNext = Flow(UInt(config.xlen bits))
-  val wawBuffer = RegNext(wawBufferNext).init(wawBufferNext.getZero)
+  val wawBufferValidNext = Bool()
+  val wawBufferValid = RegNext(wawBufferValidNext).init(False)
+
+  val wawBuffer = Reg(UInt(config.xlen bits)).init(0)
 
   def build(): Unit = {
     rs1.build()
@@ -39,7 +41,7 @@ case class InstructionDependencies(indexBits: BitCount)(implicit config: Config)
     pendingActivating.build()
     previousWaw.build()
 
-    wawBufferNext := wawBuffer
+    wawBufferValidNext := wawBufferValid
   }
 
   def reset(): Unit = {
@@ -48,7 +50,7 @@ case class InstructionDependencies(indexBits: BitCount)(implicit config: Config)
     pendingActivating.reset()
     previousWaw.reset()
 
-    wawBufferNext.setIdle()
+    wawBufferValidNext := False
   }
 }
 
@@ -136,8 +138,9 @@ class ReservationStation(
     }
 
     when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
-      when(cdbMessage.realUpdate && !meta.wawBuffer.valid) {
-        meta.wawBuffer.push(cdbMessage.writeValue)
+      when(cdbMessage.realUpdate && !meta.wawBufferValidNext) {
+        meta.wawBuffer := cdbMessage.writeValue
+        meta.wawBufferValid := True
       }
       when(cdbMessage.previousWaw.valid) {
         meta.previousWaw.priorInstruction.push(cdbMessage.previousWaw.payload)
@@ -271,8 +274,8 @@ class ReservationStation(
           cdbStream.payload.mmex := ex
 
           when(mim) {
-            cdbStream.payload.writeValue := meta.wawBuffer.payload
-            cdbStream.payload.realUpdate := meta.wawBuffer.valid
+            cdbStream.payload.writeValue := meta.wawBuffer
+            cdbStream.payload.realUpdate := meta.wawBufferValid
           } otherwise {
             cdbStream.payload.writeValue := exeStage.output(pipeline.data.RD_DATA)
             cdbStream.payload.realUpdate := exeStage.output(pipeline.data.RD_DATA_VALID)
@@ -285,7 +288,8 @@ class ReservationStation(
       cdbStream.payload.activatingTaken := False
       cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
       dispatchStream.payload.previousWaw := meta.previousWaw.priorInstruction
-      dispatchStream.payload.wawBuffer := meta.wawBuffer
+      dispatchStream.payload.wawBuffer.valid := meta.wawBufferValid
+      dispatchStream.payload.wawBuffer.payload := meta.wawBuffer
 
       cdbStream.payload.robIndex := robEntryIndex
       dispatchStream.payload.robIndex := robEntryIndex
@@ -338,15 +342,16 @@ class ReservationStation(
       when(cdbWaiting) {
         cdbStream.payload.previousWaw := meta.previousWaw.priorInstruction
         when(!resultCdbMessage.realUpdate) {
-          resultCdbMessage.realUpdate := meta.wawBuffer.valid
-          resultCdbMessage.writeValue := meta.wawBuffer.payload
+          resultCdbMessage.realUpdate := meta.wawBufferValid
+          resultCdbMessage.writeValue := meta.wawBuffer
 
         }
       }
 
       when(dispatchWaiting) {
         dispatchStream.payload.previousWaw := meta.previousWaw.priorInstruction
-        dispatchStream.payload.wawBuffer := meta.wawBuffer
+        dispatchStream.payload.wawBuffer.valid := meta.wawBufferValid
+        dispatchStream.payload.wawBuffer.payload := meta.wawBuffer
       }
 
       cdbStream.valid := cdbWaiting
