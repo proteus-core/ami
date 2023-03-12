@@ -9,7 +9,6 @@ import spinal.lib.{Counter, Flow}
 // Each ROB entry is tagged with the following metadata:
 // shadowingActivating: the ID of the activating branch this instruction is mimic-dependent on
 // previousWaw: the ID of the previous instruction that writes to the same target as this instruction (only if this instruction writes to a register)
-// pendingExitAddress: if the instruction is activating and the corresponding exit has not been reached yet, we store the corresponding exit address here
 case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBits: BitCount)(
     implicit config: Config
 ) extends Bundle {
@@ -19,7 +18,6 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
   val cdbUpdated = Bool()
   val mimicDependency = Flow(UInt(indexBits))
   val previousWaw = Flow(UInt(indexBits))
-  val pendingExit = Flow(UInt(config.xlen bits))
 
   // temporary
   val mmac = UInt(config.xlen bits)
@@ -233,15 +231,6 @@ class ReorderBuffer(
     adjusted
   }
 
-  val pendingActivating = Flow(UInt(indexBits))
-  pendingActivating.setIdle()
-
-  val metaUpdateNeeded = Bool()
-  metaUpdateNeeded := False
-
-  val secondP = Bool()
-  secondP := False
-
   def pushEntry(): (UInt, EntryMetadata, Flow[UInt], (UInt, UInt, UInt)) = {
     val issueStage = pipeline.issuePipeline.stages.last
 
@@ -300,6 +289,12 @@ class ReorderBuffer(
       (outac, outen, outex)
     }
 
+    val pendingActivating = Flow(UInt(indexBits))
+    pendingActivating.setIdle()
+
+    val metaUpdateNeeded = Bool()
+    metaUpdateNeeded := False
+
     pipeline.serviceOption[MimicryService].foreach { mimicry =>
       {
         val outac = entryMeta.mmac
@@ -321,22 +316,13 @@ class ReorderBuffer(
           }
         }
 
-        val noPush = False
-
-        // find first prior instruction with pendingExit
         val priorPending = stackTop()
         when(priorPending.valid) {
           when(priorPending.exit === pc) {
             stackPopNow := True
-//            when(mimicry.isActivating(issueStage)) {
-//              noPush := True
-//            } otherwise {
-//              stackPop()
-//            }
             val secondPending = stackUnderTop()
             // if pc == pendingExit, remove this pendingExit, look for the next one, then (if valid, copy MM, if not valid, depend on it)
             when(secondPending.valid) {
-              secondP := True
               handleExit(secondPending.robId)
               found := True
             }
@@ -354,7 +340,6 @@ class ReorderBuffer(
           when(mimicry.isABranch(issueStage)) {
             nextPc := pc + issueStage.output(pipeline.data.IMM)
           }
-          pushedEntry.pendingExit.push(nextPc)
           pushedStackEntry.robId := newestIndex
           pushedStackEntry.exit := nextPc
           stackPushNow := True

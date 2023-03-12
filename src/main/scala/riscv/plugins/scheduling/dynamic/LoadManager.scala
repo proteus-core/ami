@@ -43,19 +43,11 @@ class LoadManager(
   private val state = RegNext(stateNext).init(State.IDLE)
   val isAvailable: Bool = Bool()
 
-  val cdbReceive = Bool()
-  cdbReceive := False
-
-  val cdbUpdate = Bool()
-  cdbUpdate := False
-
   override def onCdbMessage(cdbMessage: CdbMessage): Unit = {
-    cdbReceive := True
     val currentWaw = Flow(UInt(rob.indexBits))
     currentWaw := previousWaw.priorInstructionNext
 
     when(currentWaw.valid && cdbMessage.robIndex === currentWaw.payload) {
-      cdbUpdate := True
       when(cdbMessage.realUpdate && !wawBufferNext.valid) {
         wawBuffer.push(cdbMessage.writeValue)
       }
