@@ -162,6 +162,85 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[DynamicPipeline] with
   }
 
   override def build(): Unit = {
+    for (stage <- exeStages) {
+      stage plug new Area {
+        val mmac = stage.input(Data.MMAC)
+        val pc = stage.input(pipeline.data.PC)
+        val mmex = stage.input(Data.MMEXIT)
+        val mmen = stage.input(Data.MMENTRY)
+
+        val nextPc = stage.output(pipeline.data.NEXT_PC)
+
+        val ajump = isAJump(stage)
+
+        val abranch = isABranch(stage)
+
+        val branchTaken = pipeline.service[JumpService].jumpRequested(stage)
+
+        val mimic = isMimic(stage)
+
+        val ghost = isGhost(stage)
+
+        val persistent = isPersistent(stage)
+
+        val isExit = (mmac === 1) && (pc === mmex)
+
+        val reactivation = False
+
+        val mimicked = False
+
+        // 1) Is mimicry mode disabled?
+        when((mmac === 0) || isExit) {
+          // 1.1) Are we dealing with an activating jump? 1.2) Are we dealing with an activating branch?
+          when(ajump || (abranch && branchTaken)) {
+            reactivation := True
+
+            stage.output(Data.MMENTRY) := pc
+            stage.output(Data.MMEXIT) := nextPc
+
+            stage.output(Data.MMAC) := 1
+          }
+        }
+
+        // 2) Is the current program counter registered as the entry address?
+        when(pc === mmen && mmac > 0) {
+          stage.output(Data.MMAC) := mmac + 1
+        }
+
+        // 3) Is the current program counter registered as the exit address?
+        when(!reactivation) {
+          when(pc === mmex && mmac > 0) {
+            when(mmac === 1) {
+              // We are exiting mimicry mode
+              stage.output(Data.MMENTRY) := CSR_MMADDR_NONE
+              stage.output(Data.MMEXIT) := CSR_MMADDR_NONE
+            }
+
+            stage.output(Data.MMAC) := mmac - 1
+          }
+        }
+
+        // 4) Do we need to mimic the execution?
+        when(mimic) {
+          mimicked := True
+        }
+
+        when(ghost) {
+          when((mmac === 0) || isExit) {
+            mimicked := True
+          }
+        } elsewhen (!persistent) {
+          when((mmac > 0) && (!isExit)) {
+            mimicked := True
+          }
+        }
+
+        when(mimicked && stage.input(pipeline.data.RD_TYPE) === RegisterType.GPR) {
+          stage.output(pipeline.data.RD_TYPE) := MimicryRegisterType.MIMIC_GPR
+        }
+      }
+    }
+
     val ret = pipeline.retirementStage
     ret plug new Area {
       when(ret.value(Data.ABRANCH)) {

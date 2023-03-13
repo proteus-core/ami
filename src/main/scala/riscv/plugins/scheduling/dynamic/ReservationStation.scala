@@ -246,28 +246,30 @@ class ReservationStation(
 
     // when waiting for the result, and it is ready, put in on the bus
     when(state === State.EXECUTING && exeStage.arbitration.isDone && !activeFlush) {
-      val mim = Bool()
+      val mim = exeStage.output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
-          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
-          val (ac, en, ex, mim2) = pipeline
-            .service[MimicryService]
-            .determineOutcomes(
-              mmac,
-              mmen,
-              mmex,
-              exeStage.output(pipeline.data.PC),
-              exeStage.output(pipeline.data.NEXT_PC),
-              mimicry.isAJump(exeStage),
-              mimicry.isABranch(exeStage),
-              pipeline.service[JumpService].jumpRequested(exeStage),
-              mimicry.isMimic(exeStage),
-              mimicry.isGhost(exeStage),
-              mimicry.isPersistent(exeStage)
-            )
+//          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
+//          val (ac, en, ex, mim2) = pipeline
+//            .service[MimicryService]
+//            .determineOutcomes(
+//              mmac,
+//              mmen,
+//              mmex,
+//              exeStage.output(pipeline.data.PC),
+//              exeStage.output(pipeline.data.NEXT_PC),
+//              mimicry.isAJump(exeStage),
+//              mimicry.isABranch(exeStage),
+//              pipeline.service[JumpService].jumpRequested(exeStage),
+//              mimicry.isMimic(exeStage),
+//              mimicry.isGhost(exeStage),
+//              mimicry.isPersistent(exeStage)
+//            )
+//
+//          mim := mim2
 
-          mim := mim2
+          val (ac, en, ex) = mimicry.getMeta(exeStage)
 
           cdbStream.payload.mmac := ac
           cdbStream.payload.mmen := en
@@ -310,11 +312,11 @@ class ReservationStation(
               .service[JumpService]
               .jumpRequested(exeStage)
           }
-          when(mim && exeStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
-            dispatchStream.payload.registerMap.element(
-              pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
-            ) := MimicryRegisterType.MIMIC_GPR
-          }
+//          when(mim && exeStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
+//            dispatchStream.payload.registerMap.element(
+//              pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
+//            ) := MimicryRegisterType.MIMIC_GPR
+//          }
         }
       }
 

@@ -19,11 +19,6 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
   val mimicDependency = Flow(UInt(indexBits))
   val previousWaw = Flow(UInt(indexBits))
 
-  // temporary
-  val mmac = UInt(config.xlen bits)
-  val mmen = UInt(config.xlen bits)
-  val mmex = UInt(config.xlen bits)
-
   override def clone(): RobEntry = {
     RobEntry(retirementRegisters, indexBits)
   }
@@ -295,8 +290,8 @@ class ReorderBuffer(
     val metaUpdateNeeded = Bool()
     metaUpdateNeeded := False
 
-    pipeline.serviceOption[MimicryService].foreach { mimicry =>
-      {
+    val mimicry = pipeline.service[MimicryService]
+
         val outac = entryMeta.mmac
         val outen = entryMeta.mmen
         val outex = entryMeta.mmex
@@ -308,9 +303,9 @@ class ReorderBuffer(
           val entry = robEntries(absolute)
           pushedEntry.mimicDependency.push(absolute)
           when(entry.cdbUpdated /*|| entry.rdbUpdated*/ ) {
-            outac := entry.mmac
-            outen := entry.mmen
-            outex := entry.mmex
+            outac := mimicry.acOfBundle(entry.registerMap)
+            outen := mimicry.enOfBundle(entry.registerMap)
+            outex := mimicry.exOfBundle(entry.registerMap)
           } otherwise {
             metaUpdateNeeded := True
           }
@@ -378,21 +373,19 @@ class ReorderBuffer(
         }
 
         val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
-        pushedEntry.mmac := mmac
-        pushedEntry.mmen := mmen
-        pushedEntry.mmex := mmex
+        mimicry.acOfBundle(pushedEntry.registerMap) := mmac
+        mimicry.enOfBundle(pushedEntry.registerMap) := mmen
+        mimicry.exOfBundle(pushedEntry.registerMap) := mmex
 
         when(metaUpdateNeeded) {
           pendingActivating := pushedEntry.mimicDependency
         }
-      }
-    }
 
     (
       newestIndex.value,
       entryMeta,
       pendingActivating,
-      (pushedEntry.mmac, pushedEntry.mmen, pushedEntry.mmex)
+      (mmac, mmen, mmex)
     )
   }
 
@@ -449,9 +442,9 @@ class ReorderBuffer(
         rsUpdate(rs2Id, absolute, entry, meta.rs2Data.payload)
 
         when(!entry.mimicDependency.valid) {
-          meta.mmac := entry.mmac
-          meta.mmen := entry.mmen
-          meta.mmex := entry.mmex
+          meta.mmac := pipeline.service[MimicryService].acOfBundle(entry.registerMap)
+          meta.mmen := pipeline.service[MimicryService].enOfBundle(entry.registerMap)
+          meta.mmex := pipeline.service[MimicryService].exOfBundle(entry.registerMap)
         }
 
         val sameTarget = entry.registerMap.elementAs[UInt](
@@ -481,9 +474,9 @@ class ReorderBuffer(
 
     // When instructions are updated in the ROB after execution (onCdbMessage?):
     // Update MM** registers of the given instruction if it had a shadowing activating (even if not?)
-    robEntries(cdbMessage.robIndex).mmac := cdbMessage.mmac
-    robEntries(cdbMessage.robIndex).mmen := cdbMessage.mmen
-    robEntries(cdbMessage.robIndex).mmex := cdbMessage.mmex
+    pipeline.service[MimicryService].acOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmac
+    pipeline.service[MimicryService].enOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmen
+    pipeline.service[MimicryService].exOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmex
     robEntries(cdbMessage.robIndex).previousWaw := cdbMessage.previousWaw
 
     when(cdbMessage.realUpdate) {
@@ -570,10 +563,13 @@ class ReorderBuffer(
       ret.arbitration.isValid := True
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
-        MMAC := oldestEntry.mmac
-        MMEN := oldestEntry.mmen
-        MMEX := oldestEntry.mmex
-        mimicry.inputMeta(ret, oldestEntry.mmac, oldestEntry.mmen, oldestEntry.mmex)
+        MMAC := mimicry.acOfBundle(oldestEntry.registerMap)
+        MMEN := mimicry.enOfBundle(oldestEntry.registerMap)
+        MMEX := mimicry.exOfBundle(oldestEntry.registerMap)
+        mimicry.inputMeta(ret,
+          mimicry.acOfBundle(oldestEntry.registerMap),
+          mimicry.enOfBundle(oldestEntry.registerMap),
+          mimicry.exOfBundle(oldestEntry.registerMap))
       }
 
       when(ret.arbitration.isDone) {
