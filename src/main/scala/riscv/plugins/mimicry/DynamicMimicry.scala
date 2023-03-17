@@ -45,6 +45,14 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[DynamicPipeline] with
     object MMAC extends PipelineData(UInt(32 bits)) // Activation counter
   }
 
+  override def mimicryRegisters(): Set[PipelineData[Data]] = {
+    Set(
+      Data.MMAC.asInstanceOf[PipelineData[Data]],
+      Data.MMEXIT.asInstanceOf[PipelineData[Data]],
+      Data.MMENTRY.asInstanceOf[PipelineData[Data]]
+    )
+  }
+
   // Mimicry mode entry
   private class MmEntry(implicit config: Config) extends Csr {
 
@@ -150,9 +158,9 @@ class DynamicMimicry(exeStages: Seq[Stage]) extends Plugin[DynamicPipeline] with
     // finish()). Therefore, we have to manually inform the router that these outputs will be
     // needed.
     for (stage <- pipeline.rsStages :+ pipeline.retirementStage) {
-      stage.value(Data.MMAC)
-      stage.value(Data.MMENTRY)
-      stage.value(Data.MMEXIT)
+//      stage.value(Data.MMAC)
+//      stage.value(Data.MMENTRY)
+//      stage.value(Data.MMEXIT)
       stage.value(Data.AJUMP)
       stage.value(Data.ABRANCH)
       stage.value(Data.GHOST)

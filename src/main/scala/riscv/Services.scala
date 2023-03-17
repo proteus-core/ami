@@ -444,6 +444,8 @@ trait DataHazardService {
 }
 
 trait MimicryService {
+  def mimicryRegisters(): Set[PipelineData[Data]]
+
   val CSR_MMADDR_NONE = 0x7fffffff
 
   def isGhost(stage: Stage): Bool

@@ -21,11 +21,9 @@ class Scheduler() extends Plugin[DynamicPipeline] with IssueService {
       val registerBundle = new DynBundle[PipelineData[spinal.core.Data]]
 
       private val ret = pipeline.retirementStage
-      private val ls = pipeline.loadStages.head // TODO !!!
-      for (
-        register <-
-          ret.lastValues.keys.toSet union ret.outputs.keys.toSet union ls.lastValues.keys.toSet union ls.outputs.keys.toSet
-      ) {
+      private val ls = pipeline.loadStages.head
+      private val mimicryRegisters = pipeline.service[MimicryService].mimicryRegisters()
+      for (register <- (ret.inputs.keys.toSet union ls.inputs.keys.toSet) diff mimicryRegisters) {
         registerBundle.addElement(register, register.dataType)
       }
 

@@ -522,6 +522,10 @@ class ReorderBuffer(
       ret.input(register) := oldestEntry.registerMap.element(register)
     }
 
+    pipeline.serviceOption[MimicryService].foreach { mimicry =>
+      mimicry.inputMeta(ret, 0, 0, 0)
+    }
+
     // FIXME this doesn't seem the correct place to do this...
     ret.connectOutputDefaults()
     ret.connectLastValues()
@@ -551,7 +555,11 @@ class ReorderBuffer(
           when(!singleElement || !stackPopNow) {
             // TODO: automate this somehow based on the output of the retirement stage?
             when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
-              when(currentMMAC === 0 || oldestEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) === enCsr.read()) {
+              when(
+                currentMMAC === 0 || oldestEntry.registerMap.element(
+                  pipeline.data.PC.asInstanceOf[PipelineData[Data]]
+                ) === enCsr.read()
+              ) {
                 currentMMAC := currentMMAC + 1
               }
             }
