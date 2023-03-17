@@ -78,12 +78,18 @@ class ReorderBuffer(
   private val pushedEntry = RobEntry(retirementRegisters, indexBits)
   pushedEntry := RobEntry(retirementRegisters, indexBits).getZero
 
-  // save some work by keeping a copy of CSR values and not looking them up every cycle
-  private val MMAC = Reg(UInt(config.xlen bits)).init(0)
-  private val MMEN =
-    Reg(UInt(config.xlen bits)).init(pipeline.service[MimicryService].CSR_MMADDR_NONE)
-  private val MMEX =
-    Reg(UInt(config.xlen bits)).init(pipeline.service[MimicryService].CSR_MMADDR_NONE)
+  // TODO: not like this
+  private val CSR_MMAC = 0x7ff
+  private val CSR_MMENTRY = 0x7df // CSR identifier
+  private val CSR_MMEXIT = 0x7ef // CSR identifier
+
+  private val acCsr = readOnlyCsr(CSR_MMAC)
+  private val enCsr = readOnlyCsr(CSR_MMENTRY)
+  private val exCsr = readOnlyCsr(CSR_MMEXIT)
+
+  val committedMMEX = exCsr.read()
+
+  val currentMMAC = Reg(UInt(config.xlen bits)).init(0)
 
   case class MimicryStackEntry() extends Bundle {
     val robId = UInt(indexBits)
@@ -175,6 +181,7 @@ class ReorderBuffer(
 
     stackOldestIndex := 1
     stackNewestIndex.clear()
+    currentMMAC := acCsr.read()
   }
 
   private def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -266,12 +273,9 @@ class ReorderBuffer(
     metaUpdateNeeded := False
 
     val mimicryMode = Bool()
-    mimicryMode := False
+    mimicryMode := currentMMAC > 0
 
     val mimicry = pipeline.service[MimicryService]
-
-    val found = Bool()
-    found := False
 
     def handleExit(absolute: UInt): Unit = {
       val entry = robEntries(absolute)
@@ -292,12 +296,10 @@ class ReorderBuffer(
         // if pc == pendingExit, remove this pendingExit, look for the next one, then (if valid, copy MM, if not valid, depend on it)
         when(secondPending.valid) {
           handleExit(secondPending.robId)
-          found := True
         }
       } otherwise {
         // if pc != pendingExit, (if valid, copy MM, if not valid, depend on it)
         handleExit(priorPending.robId)
-        found := True
       }
     }
 
@@ -342,6 +344,13 @@ class ReorderBuffer(
     } otherwise {
       when(stackPushNow) {
         pushToStack(pushedStackEntry.robId, pushedStackEntry.exit)
+      }
+    }
+
+    when(!pushedEntry.mimicDependency.valid && currentMMAC > 0 && pc === exCsr.read()) {
+      currentMMAC := currentMMAC - 1
+      when(currentMMAC === 1) {
+        mimicryMode := False
       }
     }
 
@@ -498,15 +507,6 @@ class ReorderBuffer(
     csr
   }
 
-  // TODO: not like this
-  private val CSR_MMAC = 0x7ff
-  private val CSR_MMENTRY = 0x7df // CSR identifier
-  private val CSR_MMEXIT = 0x7ef // CSR identifier
-
-  private val acCsr = readOnlyCsr(CSR_MMAC)
-  private val enCsr = readOnlyCsr(CSR_MMENTRY)
-  private val exCsr = readOnlyCsr(CSR_MMEXIT)
-
   def build(): Unit = {
     isFullNext := isFull
     val oldestEntry = robEntries(oldestIndex.value)
@@ -548,6 +548,14 @@ class ReorderBuffer(
         val bottom = stackBottom()
         when(bottom.valid && bottom.robId === oldestIndex) {
           removeBottom()
+          when(!singleElement || !stackPopNow) {
+            // TODO: automate this somehow based on the output of the retirement stage?
+            when(pipeline.service[JumpService].jumpOfBundle(oldestEntry.registerMap)) {
+              when(currentMMAC === 0 || oldestEntry.registerMap.element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) === enCsr.read()) {
+                currentMMAC := currentMMAC + 1
+              }
+            }
+          }
         }
         // removing the oldest entry
         updatedOldestIndex := oldestIndex.valueNext

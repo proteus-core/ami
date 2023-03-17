@@ -250,10 +250,12 @@ class ReservationStation(
     // when waiting for the result, and it is ready, put in on the bus
     when(state === State.EXECUTING && exeStage.arbitration.isDone && !activeFlush) {
       val mim = exeStage.output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
+      val realUpdate = Bool()
+//      realUpdate := False
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
-          val realUpdate =
+          realUpdate :=
             !(meta.mimicryMode ^ mimicry.isGhost(exeStage)) | mimicry.isPersistent(exeStage)
 
           //          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
@@ -309,16 +311,16 @@ class ReservationStation(
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
           when(mimicry.isActivating(exeStage)) {
+            val taken = pipeline.service[JumpService].jumpRequested(exeStage) | meta.mimicryMode
             cdbStream.valid := True
-            cdbStream.payload.activatingTaken := pipeline
-              .service[JumpService]
-              .jumpRequested(exeStage) | meta.mimicryMode
+            cdbStream.payload.activatingTaken := taken
+            pipeline.service[JumpService].jumpOfBundle(dispatchStream.payload.registerMap) := taken
           }
-//          when(mim && exeStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
-//            dispatchStream.payload.registerMap.element(
-//              pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
-//            ) := MimicryRegisterType.MIMIC_GPR
-//          }
+          when(!realUpdate && exeStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
+            dispatchStream.payload.registerMap.element(
+              pipeline.data.RD_TYPE.asInstanceOf[PipelineData[Data]]
+            ) := MimicryRegisterType.MIMIC_GPR
+          }
         }
       }
 
