@@ -53,6 +53,10 @@ class PcManager() extends Plugin[DynamicPipeline] with JumpService {
     stage.output(PrivateRegisters.JUMP_REQUESTED)
   }
 
+  override def jumpRequestedInput(stage: Stage): Bool = {
+    stage.input(PrivateRegisters.JUMP_REQUESTED)
+  }
+
   override def setFetchPc(pc: UInt): Unit = {
     val staticPcManager = pipeline.issuePipeline.service[JumpService]
     staticPcManager.setFetchPc(pc)

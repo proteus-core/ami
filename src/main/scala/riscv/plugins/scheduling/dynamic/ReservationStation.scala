@@ -35,6 +35,9 @@ case class InstructionDependencies(indexBits: BitCount)(implicit config: Config)
 
   val wawBuffer = Reg(UInt(config.xlen bits)).init(0)
 
+  val mimicryModeNext = Bool()
+  val mimicryMode = RegNext(mimicryModeNext).init(False)
+
   def build(): Unit = {
     rs1.build()
     rs2.build()
@@ -42,6 +45,7 @@ case class InstructionDependencies(indexBits: BitCount)(implicit config: Config)
     previousWaw.build()
 
     wawBufferValidNext := wawBufferValid
+    mimicryModeNext := mimicryMode
   }
 
   def reset(): Unit = {
@@ -51,6 +55,7 @@ case class InstructionDependencies(indexBits: BitCount)(implicit config: Config)
     previousWaw.reset()
 
     wawBufferValidNext := False
+    mimicryModeNext := False
   }
 }
 
@@ -194,9 +199,7 @@ class ReservationStation(
       ) {
         meta.pendingActivating.priorInstruction.valid := False
         paw := False
-        pipeline
-          .service[MimicryService]
-          .inputMeta(regs, cdbMessage.mmac, cdbMessage.mmen, cdbMessage.mmex)
+        meta.mimicryMode := cdbMessage.activatingTaken
       }
 
       when(!r1w && !r2w && !paw) { // we don't have to wait for all waws to resolve here
@@ -250,7 +253,10 @@ class ReservationStation(
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
-//          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
+          val realUpdate =
+            !(meta.mimicryMode ^ mimicry.isGhost(exeStage)) | mimicry.isPersistent(exeStage)
+
+          //          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
 //          val (ac, en, ex, mim2) = pipeline
 //            .service[MimicryService]
 //            .determineOutcomes(
@@ -271,11 +277,7 @@ class ReservationStation(
 
           val (ac, en, ex) = mimicry.getMeta(exeStage)
 
-          cdbStream.payload.mmac := ac
-          cdbStream.payload.mmen := en
-          cdbStream.payload.mmex := ex
-
-          when(mim) {
+          when(!realUpdate) {
             cdbStream.payload.writeValue := meta.wawBuffer
             cdbStream.payload.realUpdate := meta.wawBufferValid
           } otherwise {
@@ -310,7 +312,7 @@ class ReservationStation(
             cdbStream.valid := True
             cdbStream.payload.activatingTaken := pipeline
               .service[JumpService]
-              .jumpRequested(exeStage)
+              .jumpRequested(exeStage) | meta.mimicryMode
           }
 //          when(mim && exeStage.output(pipeline.data.RD_TYPE) === RegisterType.GPR) {
 //            dispatchStream.payload.registerMap.element(
@@ -385,11 +387,9 @@ class ReservationStation(
     // with the same shadowActivating, or the csrs: if there was an activating branch, we either wait for it,
     // or it’s already resolved in the ROB)
 
-    val (robIndex, entryMeta, mimicDependency, (mmac, mmen, mmex)) = rob.pushEntry()
+    val (robIndex, entryMeta, mimicDependency, mmMode) = rob.pushEntry()
 
-    when(!mimicDependency.valid) {
-      pipeline.service[MimicryService].inputMeta(regs, mmac, mmen, mmex)
-    }
+    meta.mimicryModeNext := mmMode
 
     robEntryIndex := robIndex
 

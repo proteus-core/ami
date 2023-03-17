@@ -16,9 +16,6 @@ case class CdbMessage(metaRegisters: DynBundle[PipelineData[Data]], robIndexBits
   val realUpdate: Bool = Bool()
   val previousWaw: Flow[UInt] = Flow(UInt(robIndexBits))
   val activatingTaken: Bool = Bool()
-  val mmac: UInt = UInt(config.xlen bits)
-  val mmen: UInt = UInt(config.xlen bits)
-  val mmex: UInt = UInt(config.xlen bits)
 
   override def clone(): CdbMessage = {
     CdbMessage(metaRegisters, robIndexBits)
@@ -29,7 +26,9 @@ case class RdbMessage(retirementRegisters: DynBundle[PipelineData[Data]], robInd
     implicit config: Config
 ) extends Bundle {
   val robIndex = UInt(robIndexBits)
-  val wawBuffer = Flow(UInt(config.xlen bits))
+  val wawBuffer = Flow(
+    UInt(config.xlen bits)
+  ) // TODO: could be transported in RD_DATA to save space
   val previousWaw: Flow[UInt] = Flow(UInt(robIndexBits))
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
     retirementRegisters.createBundle

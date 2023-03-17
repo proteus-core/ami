@@ -13,7 +13,7 @@ case class RobEntry(retirementRegisters: DynBundle[PipelineData[Data]], indexBit
     implicit config: Config
 ) extends Bundle {
   val registerMap: Bundle with DynBundleAccess[PipelineData[Data]] =
-    retirementRegisters.createBundle
+    retirementRegisters.createBundle // TODO: this still contains the mimicry registers, we can save further by removing them somehow
   val rdbUpdated = Bool()
   val cdbUpdated = Bool()
   val mimicDependency = Flow(UInt(indexBits))
@@ -37,10 +37,6 @@ case class RsData(indexBits: BitCount)(implicit config: Config) extends Bundle {
 case class EntryMetadata(indexBits: BitCount)(implicit config: Config) extends Bundle {
   val rs1Data = Flow(RsData(indexBits))
   val rs2Data = Flow(RsData(indexBits))
-
-  val mmac = UInt(config.xlen bits)
-  val mmen = UInt(config.xlen bits)
-  val mmex = UInt(config.xlen bits)
 
   val previousWaw = Flow(UInt(indexBits))
 
@@ -226,7 +222,7 @@ class ReorderBuffer(
     adjusted
   }
 
-  def pushEntry(): (UInt, EntryMetadata, Flow[UInt], (UInt, UInt, UInt)) = {
+  def pushEntry(): (UInt, EntryMetadata, Flow[UInt], Bool) = {
     val issueStage = pipeline.issuePipeline.stages.last
 
     pushInCycle := True
@@ -263,38 +259,16 @@ class ReorderBuffer(
 
     val pc = issueStage.output(pipeline.data.PC)
 
-    def localUpdate(mmac: UInt, mmen: UInt, mmex: UInt): (UInt, UInt, UInt) = {
-      val outac = UInt(config.xlen bits)
-      outac := mmac
-      val outen = UInt(config.xlen bits)
-      outen := mmen
-      val outex = UInt(config.xlen bits)
-      outex := mmex
-
-      when(pc === mmen && mmac > 0) {
-        outac := mmac + 1
-      }
-      when(pc === mmex && mmac > 0) {
-        when(mmac === 1) {
-          outen := 0
-          outex := 0
-        }
-        outac := mmac - 1
-      }
-      (outac, outen, outex)
-    }
-
     val pendingActivating = Flow(UInt(indexBits))
     pendingActivating.setIdle()
 
     val metaUpdateNeeded = Bool()
     metaUpdateNeeded := False
 
-    val mimicry = pipeline.service[MimicryService]
+    val mimicryMode = Bool()
+    mimicryMode := False
 
-    val outac = entryMeta.mmac
-    val outen = entryMeta.mmen
-    val outex = entryMeta.mmex
+    val mimicry = pipeline.service[MimicryService]
 
     val found = Bool()
     found := False
@@ -303,9 +277,8 @@ class ReorderBuffer(
       val entry = robEntries(absolute)
       pushedEntry.mimicDependency.push(absolute)
       when(entry.cdbUpdated /*|| entry.rdbUpdated*/ ) {
-        outac := mimicry.acOfBundle(entry.registerMap)
-        outen := mimicry.enOfBundle(entry.registerMap)
-        outex := mimicry.exOfBundle(entry.registerMap)
+        // TODO: we're stretching the meaning of this JUMP_REQUESTED quite a lot here
+        mimicryMode := pipeline.service[JumpService].jumpOfBundle(entry.registerMap)
       } otherwise {
         metaUpdateNeeded := True
       }
@@ -372,11 +345,6 @@ class ReorderBuffer(
       }
     }
 
-    val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
-    mimicry.acOfBundle(pushedEntry.registerMap) := mmac
-    mimicry.enOfBundle(pushedEntry.registerMap) := mmen
-    mimicry.exOfBundle(pushedEntry.registerMap) := mmex
-
     when(metaUpdateNeeded) {
       pendingActivating := pushedEntry.mimicDependency
     }
@@ -385,7 +353,7 @@ class ReorderBuffer(
       newestIndex.value,
       entryMeta,
       pendingActivating,
-      (mmac, mmen, mmex)
+      mimicryMode
     )
   }
 
@@ -396,10 +364,6 @@ class ReorderBuffer(
 
     meta.rs1Data.valid := rs1Id.valid
     meta.rs2Data.valid := rs2Id.valid
-
-    meta.mmac := MMAC
-    meta.mmen := MMEN
-    meta.mmex := MMEX
 
     meta.previousWaw.setIdle()
 
@@ -441,12 +405,6 @@ class ReorderBuffer(
         rsUpdate(rs1Id, absolute, entry, meta.rs1Data.payload)
         rsUpdate(rs2Id, absolute, entry, meta.rs2Data.payload)
 
-        when(!entry.mimicDependency.valid) {
-          meta.mmac := pipeline.service[MimicryService].acOfBundle(entry.registerMap)
-          meta.mmen := pipeline.service[MimicryService].enOfBundle(entry.registerMap)
-          meta.mmex := pipeline.service[MimicryService].exOfBundle(entry.registerMap)
-        }
-
         val sameTarget = entry.registerMap.elementAs[UInt](
           pipeline.data.RD.asInstanceOf[PipelineData[Data]]
         ) === rdId.payload
@@ -473,17 +431,11 @@ class ReorderBuffer(
       .element(pipeline.data.RD_DATA.asInstanceOf[PipelineData[Data]]) := cdbMessage.writeValue
 
     // When instructions are updated in the ROB after execution (onCdbMessage?):
-    // Update MM** registers of the given instruction if it had a shadowing activating (even if not?)
-    pipeline
-      .service[MimicryService]
-      .acOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmac
-    pipeline
-      .service[MimicryService]
-      .enOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmen
-    pipeline
-      .service[MimicryService]
-      .exOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmex
     robEntries(cdbMessage.robIndex).previousWaw := cdbMessage.previousWaw
+
+    pipeline
+      .service[JumpService]
+      .jumpOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.activatingTaken
 
     when(cdbMessage.realUpdate) {
       robEntries(cdbMessage.robIndex).registerMap
@@ -535,10 +487,25 @@ class ReorderBuffer(
         .jumpOfBundle(robEntries(rdbMessage.robIndex).registerMap) := True
     }
 
-    // TODO: update mm** registers
-
     robEntries(rdbMessage.robIndex).rdbUpdated := True
   }
+
+  def readOnlyCsr(csrId: Int): CsrIo = {
+    val csrService = pipeline.service[CsrService]
+    val csr = csrService.getCsr(csrId)
+    csr.write := False
+    csr.wdata.assignDontCare()
+    csr
+  }
+
+  // TODO: not like this
+  private val CSR_MMAC = 0x7ff
+  private val CSR_MMENTRY = 0x7df // CSR identifier
+  private val CSR_MMEXIT = 0x7ef // CSR identifier
+
+  private val acCsr = readOnlyCsr(CSR_MMAC)
+  private val enCsr = readOnlyCsr(CSR_MMENTRY)
+  private val exCsr = readOnlyCsr(CSR_MMEXIT)
 
   def build(): Unit = {
     isFullNext := isFull
@@ -569,14 +536,11 @@ class ReorderBuffer(
       ret.arbitration.isValid := True
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
-        MMAC := mimicry.acOfBundle(oldestEntry.registerMap)
-        MMEN := mimicry.enOfBundle(oldestEntry.registerMap)
-        MMEX := mimicry.exOfBundle(oldestEntry.registerMap)
         mimicry.inputMeta(
           ret,
-          mimicry.acOfBundle(oldestEntry.registerMap),
-          mimicry.enOfBundle(oldestEntry.registerMap),
-          mimicry.exOfBundle(oldestEntry.registerMap)
+          acCsr.read(),
+          enCsr.read(),
+          exCsr.read()
         )
       }
 

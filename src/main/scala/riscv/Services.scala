@@ -304,6 +304,8 @@ trait JumpService {
   def disableJump(stage: Stage): Unit
 
   def jumpOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): Bool
+
+  def jumpRequestedInput(stage: Stage): Bool
 }
 
 trait BranchService {
