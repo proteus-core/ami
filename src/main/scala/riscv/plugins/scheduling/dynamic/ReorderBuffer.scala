@@ -292,94 +292,94 @@ class ReorderBuffer(
 
     val mimicry = pipeline.service[MimicryService]
 
-        val outac = entryMeta.mmac
-        val outen = entryMeta.mmen
-        val outex = entryMeta.mmex
+    val outac = entryMeta.mmac
+    val outen = entryMeta.mmen
+    val outex = entryMeta.mmex
 
-        val found = Bool()
-        found := False
+    val found = Bool()
+    found := False
 
-        def handleExit(absolute: UInt): Unit = {
-          val entry = robEntries(absolute)
-          pushedEntry.mimicDependency.push(absolute)
-          when(entry.cdbUpdated /*|| entry.rdbUpdated*/ ) {
-            outac := mimicry.acOfBundle(entry.registerMap)
-            outen := mimicry.enOfBundle(entry.registerMap)
-            outex := mimicry.exOfBundle(entry.registerMap)
-          } otherwise {
-            metaUpdateNeeded := True
-          }
+    def handleExit(absolute: UInt): Unit = {
+      val entry = robEntries(absolute)
+      pushedEntry.mimicDependency.push(absolute)
+      when(entry.cdbUpdated /*|| entry.rdbUpdated*/ ) {
+        outac := mimicry.acOfBundle(entry.registerMap)
+        outen := mimicry.enOfBundle(entry.registerMap)
+        outex := mimicry.exOfBundle(entry.registerMap)
+      } otherwise {
+        metaUpdateNeeded := True
+      }
+    }
+
+    val priorPending = stackTop()
+    when(priorPending.valid) {
+      when(priorPending.exit === pc) {
+        stackPopNow := True
+        val secondPending = stackUnderTop()
+        // if pc == pendingExit, remove this pendingExit, look for the next one, then (if valid, copy MM, if not valid, depend on it)
+        when(secondPending.valid) {
+          handleExit(secondPending.robId)
+          found := True
         }
+      } otherwise {
+        // if pc != pendingExit, (if valid, copy MM, if not valid, depend on it)
+        handleExit(priorPending.robId)
+        found := True
+      }
+    }
 
-        val priorPending = stackTop()
-        when(priorPending.valid) {
-          when(priorPending.exit === pc) {
-            stackPopNow := True
-            val secondPending = stackUnderTop()
-            // if pc == pendingExit, remove this pendingExit, look for the next one, then (if valid, copy MM, if not valid, depend on it)
-            when(secondPending.valid) {
-              handleExit(secondPending.robId)
-              found := True
-            }
-          } otherwise {
-            // if pc != pendingExit, (if valid, copy MM, if not valid, depend on it)
-            handleExit(priorPending.robId)
-            found := True
-          }
-        }
+    // if activating, set pendingExit
+    when(mimicry.isActivating(issueStage)) {
+      val nextPc = UInt()
+      nextPc := issueStage.output(pipeline.data.NEXT_PC)
+      when(mimicry.isABranch(issueStage)) {
+        nextPc := pc + issueStage.output(pipeline.data.IMM)
+      }
+      pushedStackEntry.robId := newestIndex
+      pushedStackEntry.exit := nextPc
+      stackPushNow := True
+    }
 
-        // if activating, set pendingExit
-        when(mimicry.isActivating(issueStage)) {
-          val nextPc = UInt()
-          nextPc := issueStage.output(pipeline.data.NEXT_PC)
-          when(mimicry.isABranch(issueStage)) {
-            nextPc := pc + issueStage.output(pipeline.data.IMM)
-          }
-          pushedStackEntry.robId := newestIndex
-          pushedStackEntry.exit := nextPc
-          stackPushNow := True
-        }
-
-        when(stackPopNow) {
-          // implies >= 1 entries
-          when(singleElement) {
-            // single entry in stack
-            when(stackBottomRemoveNow) {
-              // don't remove from two sides
-              when(stackPushNow) {
-                pushToStack(pushedStackEntry.robId, pushedStackEntry.exit)
-              }
-            } otherwise {
-              when(stackPushNow) {
-                mimicryStack(stackNewestIndex).robId := pushedStackEntry.robId
-                mimicryStack(stackNewestIndex).exit := pushedStackEntry.exit
-              } otherwise {
-                stackPop()
-              }
-            }
-          } otherwise {
-            // multiple entries in stack
-            when(stackPushNow) {
-              mimicryStack(stackNewestIndex).robId := pushedStackEntry.robId
-              mimicryStack(stackNewestIndex).exit := pushedStackEntry.exit
-            } otherwise {
-              stackPop()
-            }
-          }
-        } otherwise {
+    when(stackPopNow) {
+      // implies >= 1 entries
+      when(singleElement) {
+        // single entry in stack
+        when(stackBottomRemoveNow) {
+          // don't remove from two sides
           when(stackPushNow) {
             pushToStack(pushedStackEntry.robId, pushedStackEntry.exit)
           }
+        } otherwise {
+          when(stackPushNow) {
+            mimicryStack(stackNewestIndex).robId := pushedStackEntry.robId
+            mimicryStack(stackNewestIndex).exit := pushedStackEntry.exit
+          } otherwise {
+            stackPop()
+          }
         }
-
-        val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
-        mimicry.acOfBundle(pushedEntry.registerMap) := mmac
-        mimicry.enOfBundle(pushedEntry.registerMap) := mmen
-        mimicry.exOfBundle(pushedEntry.registerMap) := mmex
-
-        when(metaUpdateNeeded) {
-          pendingActivating := pushedEntry.mimicDependency
+      } otherwise {
+        // multiple entries in stack
+        when(stackPushNow) {
+          mimicryStack(stackNewestIndex).robId := pushedStackEntry.robId
+          mimicryStack(stackNewestIndex).exit := pushedStackEntry.exit
+        } otherwise {
+          stackPop()
         }
+      }
+    } otherwise {
+      when(stackPushNow) {
+        pushToStack(pushedStackEntry.robId, pushedStackEntry.exit)
+      }
+    }
+
+    val (mmac, mmen, mmex) = localUpdate(outac, outen, outex)
+    mimicry.acOfBundle(pushedEntry.registerMap) := mmac
+    mimicry.enOfBundle(pushedEntry.registerMap) := mmen
+    mimicry.exOfBundle(pushedEntry.registerMap) := mmex
+
+    when(metaUpdateNeeded) {
+      pendingActivating := pushedEntry.mimicDependency
+    }
 
     (
       newestIndex.value,
@@ -474,9 +474,15 @@ class ReorderBuffer(
 
     // When instructions are updated in the ROB after execution (onCdbMessage?):
     // Update MM** registers of the given instruction if it had a shadowing activating (even if not?)
-    pipeline.service[MimicryService].acOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmac
-    pipeline.service[MimicryService].enOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmen
-    pipeline.service[MimicryService].exOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmex
+    pipeline
+      .service[MimicryService]
+      .acOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmac
+    pipeline
+      .service[MimicryService]
+      .enOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmen
+    pipeline
+      .service[MimicryService]
+      .exOfBundle(robEntries(cdbMessage.robIndex).registerMap) := cdbMessage.mmex
     robEntries(cdbMessage.robIndex).previousWaw := cdbMessage.previousWaw
 
     when(cdbMessage.realUpdate) {
@@ -566,10 +572,12 @@ class ReorderBuffer(
         MMAC := mimicry.acOfBundle(oldestEntry.registerMap)
         MMEN := mimicry.enOfBundle(oldestEntry.registerMap)
         MMEX := mimicry.exOfBundle(oldestEntry.registerMap)
-        mimicry.inputMeta(ret,
+        mimicry.inputMeta(
+          ret,
           mimicry.acOfBundle(oldestEntry.registerMap),
           mimicry.enOfBundle(oldestEntry.registerMap),
-          mimicry.exOfBundle(oldestEntry.registerMap))
+          mimicry.exOfBundle(oldestEntry.registerMap)
+        )
       }
 
       when(ret.arbitration.isDone) {
