@@ -45,24 +45,25 @@ trait DynamicPipeline extends Pipeline {
   override def connectStages(): Unit = {
 
     for (stage <- unorderedStages :+ retirementStage) {
-      stage.output(data.PC)
-      stage.output(data.IR)
+      stage.input(data.PC)
+      stage.input(data.IR)
 
       // HACK!
-      stage.output(data.RD)
-      stage.output(data.RD_DATA_VALID)
-      stage.output(data.RD_TYPE)
-      stage.output(data.NEXT_PC)
-      stage.output(data.IMM)
-      stage.value(data.RS1)
-      stage.value(data.RS2)
-      stage.value(data.RS1_TYPE)
-      stage.value(data.RS2_TYPE)
+      stage.input(data.RD)
+      stage.input(data.RD_DATA_VALID)
+      stage.input(data.RD_TYPE)
+      stage.input(data.NEXT_PC)
+      stage.input(data.IMM)
+      stage.input(data.RS1)
+      stage.input(data.RS2)
+      stage.input(data.RS1_TYPE)
+      stage.input(data.RS2_TYPE)
 
       service[BranchTargetPredictorService].predictedPc(stage)
       service[JumpService].jumpRequested(stage)
     }
 
+    // TODO: i don't think we need this
     // HACK make sure that all pipeline regs are routed through *all* exe stages.
     // I'm embarrassed...
     // https://gitlab.com/ProteusCore/ProteusCore/-/issues/17

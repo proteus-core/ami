@@ -249,35 +249,12 @@ class ReservationStation(
 
     // when waiting for the result, and it is ready, put in on the bus
     when(state === State.EXECUTING && exeStage.arbitration.isDone && !activeFlush) {
-      val mim = exeStage.output(pipeline.data.RD_TYPE) === MimicryRegisterType.MIMIC_GPR
       val realUpdate = Bool()
-//      realUpdate := False
 
       pipeline.serviceOption[MimicryService].foreach { mimicry =>
         {
           realUpdate :=
             !(meta.mimicryMode ^ mimicry.isGhost(exeStage)) | mimicry.isPersistent(exeStage)
-
-          //          val (mmac, mmen, mmex) = mimicry.getMeta(exeStage)
-//          val (ac, en, ex, mim2) = pipeline
-//            .service[MimicryService]
-//            .determineOutcomes(
-//              mmac,
-//              mmen,
-//              mmex,
-//              exeStage.output(pipeline.data.PC),
-//              exeStage.output(pipeline.data.NEXT_PC),
-//              mimicry.isAJump(exeStage),
-//              mimicry.isABranch(exeStage),
-//              pipeline.service[JumpService].jumpRequested(exeStage),
-//              mimicry.isMimic(exeStage),
-//              mimicry.isGhost(exeStage),
-//              mimicry.isPersistent(exeStage)
-//            )
-//
-//          mim := mim2
-
-          val (ac, en, ex) = mimicry.getMeta(exeStage)
 
           when(!realUpdate) {
             cdbStream.payload.writeValue := meta.wawBuffer
@@ -378,17 +355,6 @@ class ReservationStation(
   }
 
   def execute(): Unit = {
-    val issueStage = pipeline.issuePipeline.stages.last
-
-    // In the reservation station:
-    // Information propagated from the ROB (execute):
-    // Dependent instruction for RS1 and RS2
-    // Previous unresolved WAW instruction
-    // Dependent unresolved activating instruction
-    // Current values of AC, EN, EX (this is taken from the last instruction with a cdb update in the ROB
-    // with the same shadowActivating, or the csrs: if there was an activating branch, we either wait for it,
-    // or it’s already resolved in the ROB)
-
     val (robIndex, entryMeta, mimicDependency, mmMode) = rob.pushEntry()
 
     meta.mimicryModeNext := mmMode

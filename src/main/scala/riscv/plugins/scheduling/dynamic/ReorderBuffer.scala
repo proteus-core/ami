@@ -87,8 +87,6 @@ class ReorderBuffer(
   private val enCsr = readOnlyCsr(CSR_MMENTRY)
   private val exCsr = readOnlyCsr(CSR_MMEXIT)
 
-  val committedMMEX = exCsr.read()
-
   val currentMMAC = Reg(UInt(config.xlen bits)).init(0)
 
   case class MimicryStackEntry() extends Bundle {
@@ -181,7 +179,26 @@ class ReorderBuffer(
 
     stackOldestIndex := 1
     stackNewestIndex.clear()
-    currentMMAC := acCsr.read()
+    // TODO: can currentMMAC get the wrong value if the reset happens when an activating is retiring?
+    // this logic hurts to include here in general
+    when(willRetire && acCsr.read() > 0) {
+      when(
+        robEntries(oldestIndex).registerMap
+          .element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) === enCsr.read()
+      ) {
+        currentMMAC := acCsr.read() + 1
+      }
+      when(
+        robEntries(oldestIndex).registerMap
+          .element(pipeline.data.PC.asInstanceOf[PipelineData[Data]]) === exCsr.read()
+      ) {
+        currentMMAC := acCsr.read() - 1
+      }
+    } otherwise {
+      when(!stackBottomRemoveNow) {
+        currentMMAC := acCsr.read()
+      }
+    }
   }
 
   private def isValidAbsoluteIndex(index: UInt): Bool = {
@@ -347,6 +364,7 @@ class ReorderBuffer(
       }
     }
 
+    // TODO: can it happen that currentMMAC is increased and decreased in the same cycle?
     when(!pushedEntry.mimicDependency.valid && currentMMAC > 0 && pc === exCsr.read()) {
       currentMMAC := currentMMAC - 1
       when(currentMMAC === 1) {

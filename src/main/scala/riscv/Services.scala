@@ -458,35 +458,11 @@ trait MimicryService {
 
   def isAJump(stage: Stage): Bool
 
-  def inputMeta(regs: PipelineRegs, mmac: UInt, mmen: UInt, mmex: UInt): Unit
-
   def inputMeta(stage: Stage, mmac: UInt, mmen: UInt, mmex: UInt): Unit
-
-  def exOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
-
-  def enOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
-
-  def acOfBundle(bundle: Bundle with DynBundleAccess[PipelineData[Data]]): UInt
 
   def isSensitiveBranch(stage: Stage): Bool
 
   def isActivating(stage: Stage): Bool
-
-  def determineOutcomes(
-      mmac: UInt,
-      mmen: UInt,
-      mmex: UInt,
-      pc: UInt,
-      nextPc: UInt,
-      ajump: Bool,
-      abranch: Bool,
-      branchTaken: Bool,
-      mimic: Bool,
-      ghost: Bool,
-      persistent: Bool
-  ): (UInt, UInt, UInt, Bool)
-
-  def getMeta(stage: Stage): (UInt, UInt, UInt)
 }
 
 trait FormalService {
