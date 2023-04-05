@@ -94,9 +94,11 @@ class ReorderBuffer(
     val exit = UInt(config.xlen bits)
   }
 
-  private val mimicryStack = Vec.fill(capacity)(RegInit(MimicryStackEntry().getZero))
-  private val stackOldestIndex = Counter(capacity).init(1)
-  private val stackNewestIndex = Counter(capacity)
+  private val stackCapacity = 2
+
+  private val mimicryStack = Vec.fill(stackCapacity)(RegInit(MimicryStackEntry().getZero))
+  private val stackOldestIndex = Counter(stackCapacity).init(1)
+  private val stackNewestIndex = Counter(stackCapacity)
 
   private val stackBottomRemoveNow = Bool()
   stackBottomRemoveNow := False
@@ -110,19 +112,19 @@ class ReorderBuffer(
   // stack management
   private val singleElement = stackOldestIndex === stackNewestIndex
 
-  private def nextIndex(index: UInt) = {
+  private def nextStackIndex(index: UInt) = {
     val result = U(0)
-    when(index =/= capacity - 1) {
+    when(index =/= stackCapacity - 1) {
       result := index + 1
     }
     result
   }
 
   private def stackEmpty(): Bool = {
-    stackOldestIndex === nextIndex(stackNewestIndex)
+    stackOldestIndex === nextStackIndex(stackNewestIndex)
   }
 
-  private def pushToStack(id: UInt, exit: UInt) = {
+  private def pushToStack(id: UInt, exit: UInt): Unit = {
     stackNewestIndex.increment()
     mimicryStack(stackNewestIndex.valueNext).robId := id
     mimicryStack(stackNewestIndex.valueNext).exit := exit
@@ -142,7 +144,7 @@ class ReorderBuffer(
     result.setIdle()
     val previous = stackNewestIndex - 1
     when(stackNewestIndex === 0) {
-      previous := capacity - 1
+      previous := stackCapacity - 1
     }
     when(!singleElement) {
       result.push(mimicryStack(previous))
@@ -152,7 +154,7 @@ class ReorderBuffer(
 
   private def stackPop(): Unit = {
     when(stackNewestIndex === 0) {
-      stackNewestIndex := capacity - 1
+      stackNewestIndex := stackCapacity - 1
     } otherwise {
       stackNewestIndex := stackNewestIndex - 1
     }
