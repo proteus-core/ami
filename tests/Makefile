@@ -1,5 +1,6 @@
 TESTS_DIR = $(abspath .)
 BASE_DIR = $(abspath $(TESTS_DIR)/..)
+TOP_DIR = $(BASE_DIR)/..
 RISCV_TESTS_DIR = $(TESTS_DIR)/riscv-tests
 ISA_TESTS_DIR = $(RISCV_TESTS_DIR)/isa
 PROTEUS_TESTS_DIR=$(TESTS_DIR)/proteus-tests
@@ -11,16 +12,17 @@ BUILD_CORE ?= 1
 
 PYTHON = python3
 RISCV_PREFIX ?= riscv32-unknown-elf
-CC = $(RISCV_PREFIX)-gcc
-LD = $(RISCV_PREFIX)-gcc
-OBJDUMP = $(RISCV_PREFIX)-objdump
-OBJCOPY = $(RISCV_PREFIX)-objcopy
+RISCV_INSTALL_DIR = /opt/riscv/bin
+CC = $(RISCV_INSTALL_DIR)/$(RISCV_PREFIX)-gcc
+LD = $(RISCV_INSTALL_DIR)/$(RISCV_PREFIX)-gcc
+OBJDUMP = $(RISCV_INSTALL_DIR)/$(RISCV_PREFIX)-objdump
+OBJCOPY = $(RISCV_INSTALL_DIR)/$(RISCV_PREFIX)-objcopy
 ARCHFLAGS ?= -march=rv32imzicsr -mabi=ilp32
 CFLAGS = $(ARCHFLAGS)
 
-MORPHEUS_TOOLCHAIN_DIR = /usr/local/morpheus
-OBJDUMP = $(MORPHEUS_TOOLCHAIN_DIR)/bin/llvm-objdump
-CC = $(MORPHEUS_TOOLCHAIN_DIR)/bin/clang
+TOOLCHAIN_DIR = $(TOP_DIR)/toolchain/install
+OBJDUMP = $(TOOLCHAIN_DIR)/bin/llvm-objdump
+CC = $(TOOLCHAIN_DIR)/bin/clang
 CFLAGS =
 CFLAGS += --target=riscv32
 CFLAGS += -march=rv32im
