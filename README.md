@@ -1,6 +1,6 @@
 # Architectural Mimicry: Innovative Instructions to Efficiently Address Control-Flow Leakage in Data-Oblivious Programs
 
-Architectural Mimicry (AMi) is a hardware-software co-designed countermeasure to prevent leaking secrets via a program's control flow. For more information about AMi, we refer to our [S&P 2024 paper](https://sp2024.ieee-security.org/).
+Architectural Mimicry (AMi) is a hardware-software co-designed countermeasure to prevent leaking secrets via a program's control flow. For more information about AMi, we refer to our [S&P 2024 paper](https://mici.hu/papers/winderix24ami.pdf).
 
 ```
 @inproceedings{winderix:2024-ami,
